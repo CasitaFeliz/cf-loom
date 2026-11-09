@@ -6,18 +6,21 @@ import type { ReadPlan } from './read-plan.ts';
 
 /** The first place a plan differs from the one its own parts print for the Service it names first. */
 export function unprintedProblemOf(plan: BrokerPlan, read: ReadPlan): Problem | undefined {
-  const service = read.streams[0]?.service ?? read.consumers[0]?.service;
+  const service = read.streams[0]?.service ?? read.durableConsumers[0]?.service;
   if (service === undefined) {
     return undefined;
   }
   const printed = brokerPlanOfRoutes(routedOf(service, read), plan.prefix);
-  return streamDifferenceOf(plan, printed, service) ?? consumerDifferenceOf(plan, printed, service);
+  return (
+    streamDifferenceOf(plan, printed, service) ??
+    durableConsumerDifferenceOf(plan, printed, service)
+  );
 }
 
 /** What the Service the plan names first routes, read from its texts: the Message Versions its Stream's subjects name, each once, and the Subscriptions its Durable consumers are. */
 function routedOf(service: string, read: ReadPlan): RoutedService {
   const subscriptions: RoutedSubscription[] = [];
-  for (const { consumed, subject } of read.consumers) {
+  for (const { consumed, subject } of read.durableConsumers) {
     if (consumed.kind === 'subscription') {
       const event = { name: subject.name, version: subject.version };
       subscriptions.push({ name: consumed.name, provider: subject.service, event });
@@ -55,9 +58,9 @@ function streamDifferenceOf(
   return undefined;
 }
 
-const consumerFields = ['service', 'stream', 'subject'] as const;
+const durableConsumerFields = ['service', 'stream', 'subject'] as const;
 
-function consumerDifferenceOf(
+function durableConsumerDifferenceOf(
   plan: BrokerPlan,
   printed: BrokerPlan,
   service: string,
@@ -70,9 +73,9 @@ function consumerDifferenceOf(
   if (names !== undefined) {
     return names;
   }
-  for (const [name, consumer] of Object.entries(plan.durableConsumers)) {
+  for (const [name, durableConsumer] of Object.entries(plan.durableConsumers)) {
     const expected = printed.durableConsumers[name];
-    const field = consumerFields.find((key) => expected?.[key] !== consumer[key]);
+    const field = durableConsumerFields.find((key) => expected?.[key] !== durableConsumer[key]);
     if (field !== undefined) {
       return unprintedAt(['durableConsumers', name, field], service);
     }

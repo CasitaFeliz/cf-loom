@@ -150,12 +150,12 @@ function withIf(text: string | undefined, isUnprintable: boolean): Mutated | und
 }
 
 /** What a site's text is built from, read from where the site sits in the plan. */
-type SiteKind = 'stream' | 'consumer' | 'service' | 'subject' | 'other';
+type SiteKind = 'stream' | 'durable-consumer' | 'service' | 'subject' | 'other';
 
 function siteKindOf({ path, isKey }: TextSite): SiteKind {
   const [listing, , field] = path;
   if (isKey) {
-    return listing === 'streams' ? 'stream' : 'consumer';
+    return listing === 'streams' ? 'stream' : 'durable-consumer';
   }
   switch (field) {
     case 'service':
@@ -189,8 +189,8 @@ export function partReplacedOf(
       return `${prefix === null ? '' : `${prefix}_`}${kebabNameOf(next)}`;
     case 'subject':
       return subjectPartReplaced(next, site.text, prefix);
-    case 'consumer':
-      return consumerPartReplaced(next, site.text, prefix);
+    case 'durable-consumer':
+      return durableConsumerPartReplaced(next, site.text, prefix);
     case 'other':
       return kebabNameOf(next);
   }
@@ -209,7 +209,7 @@ function subjectPartReplaced(next: Next, text: string, prefix: string | null): s
   return `${head}${parts.map((part, at) => (at === index ? replacements[at] : part)).join('.')}`;
 }
 
-function consumerPartReplaced(next: Next, text: string, prefix: string | null): string {
+function durableConsumerPartReplaced(next: Next, text: string, prefix: string | null): string {
   const head = prefix === null ? '' : `${prefix}_`;
   const [service = '', ...tail] = text.slice(head.length).split('_');
   if (next() < 0.4) {

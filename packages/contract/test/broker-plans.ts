@@ -138,7 +138,7 @@ function subjectPartsOf(prefix: string | null, subject: string): SubjectParts | 
 }
 
 /** The Subscription a Durable consumer's name says, if it is not a Command Version's, and its Service. */
-function subscriptionOfConsumer(prefix: string | null, name: string) {
+function subscriptionOfDurableConsumer(prefix: string | null, name: string) {
   const [service = '', ...tail] = afterPrefix(prefix, name, '_')?.split('_') ?? [];
   const isCommand = tail[0] === 'command' && tail.length === 3;
   const subscription = tail
@@ -154,17 +154,19 @@ function subscriptionOfConsumer(prefix: string | null, name: string) {
  */
 export function modelOfPlan(plan: BrokerPlan): ServiceModel | undefined {
   const streams = Object.values(plan.streams);
-  const consumers = Object.entries(plan.durableConsumers);
-  const service = streams[0]?.service ?? consumers[0]?.[1].service ?? 'empty-service';
+  const durableConsumers = Object.entries(plan.durableConsumers);
+  const service = streams[0]?.service ?? durableConsumers[0]?.[1].service ?? 'empty-service';
   const streamed = streams.flatMap((stream) => stream.subjects);
   const subjects = streamed.map((subject) => subjectPartsOf(plan.prefix, subject));
-  const received = consumers.map(([, consumer]) => subjectPartsOf(plan.prefix, consumer.subject));
+  const received = durableConsumers.map(([, durableConsumer]) =>
+    subjectPartsOf(plan.prefix, durableConsumer.subject),
+  );
   if (subjects.includes(undefined) || received.includes(undefined)) {
     return undefined;
   }
   const subscriptions: ModelSubscription[] = [];
-  for (const [index, [name]] of consumers.entries()) {
-    const { subscription } = subscriptionOfConsumer(plan.prefix, name);
+  for (const [index, [name]] of durableConsumers.entries()) {
+    const { subscription } = subscriptionOfDurableConsumer(plan.prefix, name);
     const event = received[index];
     if (subscription !== undefined && event !== undefined) {
       const provider = event.service === service ? undefined : event.service;

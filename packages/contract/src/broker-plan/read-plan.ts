@@ -24,7 +24,7 @@ type ReadSubject = { readonly service: string } & RoutedMessage;
 type ReadStream = { readonly service: string; readonly subjects: readonly ReadSubject[] };
 
 /** A Durable consumer of the plan with what it consumes and the subject it filters on read back. */
-type ReadConsumer = {
+type ReadDurableConsumer = {
   readonly service: string;
   readonly consumed: DurableConsumed;
   readonly subject: ReadSubject;
@@ -33,7 +33,7 @@ type ReadConsumer = {
 /** A plan with every text of it read back, in the order the plan lists them. */
 export type ReadPlan = {
   readonly streams: readonly ReadStream[];
-  readonly consumers: readonly ReadConsumer[];
+  readonly durableConsumers: readonly ReadDurableConsumer[];
 };
 
 /** How a kind of text of the plan is read back: the prefix it carries, the names it is built from and the reason when it is none. */
@@ -101,13 +101,16 @@ export function readPlan(plan: BrokerPlan): Reading<ReadPlan> {
   if (streams.kind === 'unread') {
     return streams;
   }
-  const consumers = readEntries(plan.durableConsumers, (name, consumer) =>
-    readConsumer(plan.prefix, name, consumer),
+  const durableConsumers = readEntries(plan.durableConsumers, (name, durableConsumer) =>
+    readDurableConsumer(plan.prefix, name, durableConsumer),
   );
-  if (consumers.kind === 'unread') {
-    return consumers;
+  if (durableConsumers.kind === 'unread') {
+    return durableConsumers;
   }
-  return { kind: 'read', value: { streams: streams.value, consumers: consumers.value } };
+  return {
+    kind: 'read',
+    value: { streams: streams.value, durableConsumers: durableConsumers.value },
+  };
 }
 
 function readEntries<Entry, Read>(
@@ -150,16 +153,25 @@ function readStream(
   return { kind: 'read', value: { service: service.value, subjects } };
 }
 
-function readConsumer(
+function readDurableConsumer(
   prefix: string | null,
   name: string,
-  consumer: BrokerPlanDurableConsumer,
-): Reading<ReadConsumer> {
+  durableConsumer: BrokerPlanDurableConsumer,
+): Reading<ReadDurableConsumer> {
   const at: Path = ['durableConsumers', name];
   const key = readText(durableConsumerName, prefix, { at, text: name });
-  const service = readText(serviceName, prefix, { at: [...at, 'service'], text: consumer.service });
-  const stream = readText(streamName, prefix, { at: [...at, 'stream'], text: consumer.stream });
-  const filter = readText(subject, prefix, { at: [...at, 'subject'], text: consumer.subject });
+  const service = readText(serviceName, prefix, {
+    at: [...at, 'service'],
+    text: durableConsumer.service,
+  });
+  const stream = readText(streamName, prefix, {
+    at: [...at, 'stream'],
+    text: durableConsumer.stream,
+  });
+  const filter = readText(subject, prefix, {
+    at: [...at, 'subject'],
+    text: durableConsumer.subject,
+  });
   if (key.kind === 'unread') {
     return key;
   }

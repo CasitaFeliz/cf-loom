@@ -93,8 +93,8 @@ function aPrintedPlan(prefix: string | null = null): EditablePlan {
   return printed;
 }
 
-const chargeCardConsumer = 'orders-service_command_ChargeCard_v1';
-const refundConsumer = 'orders-service_command_Refund_v1';
+const chargeCardDurableConsumer = 'orders-service_command_ChargeCard_v1';
+const refundDurableConsumer = 'orders-service_command_Refund_v1';
 const refundSubject = 'orders-service.command.Refund.v1';
 
 /** The subjects of the Stream of orders-service the plan lists. */
@@ -103,18 +103,18 @@ function ordersSubjectsOf(plan: EditablePlan): string[] {
 }
 
 /** The plan with the fields of one Durable consumer it lists replaced. */
-function withConsumer(
+function withDurableConsumer(
   plan: EditablePlan,
   name: string,
   fields: Partial<EditablePlan['durableConsumers'][string]>,
 ): EditablePlan {
-  const consumer = plan.durableConsumers[name];
-  if (consumer === undefined) {
+  const durableConsumer = plan.durableConsumers[name];
+  if (durableConsumer === undefined) {
     throw new Error(`The plan lists no Durable consumer ${name}`);
   }
   return {
     ...plan,
-    durableConsumers: { ...plan.durableConsumers, [name]: { ...consumer, ...fields } },
+    durableConsumers: { ...plan.durableConsumers, [name]: { ...durableConsumer, ...fields } },
   };
 }
 
@@ -501,12 +501,14 @@ describe('reading a broker plan', () => {
   const reprinted = "is not what the plan's names print for orders-service";
 
   test('a plan that points a command’s Durable consumer at another Command Version’s subject is malformed, naming its subject', () => {
-    const plan = withConsumer(aPrintedPlan(), chargeCardConsumer, { subject: refundSubject });
+    const plan = withDurableConsumer(aPrintedPlan(), chargeCardDurableConsumer, {
+      subject: refundSubject,
+    });
 
     const decoded = decodeBrokerPlan(plan);
 
     expect(decoded).toEqual(
-      malformed(`durableConsumers.${chargeCardConsumer}.subject ${reprinted}`),
+      malformed(`durableConsumers.${chargeCardDurableConsumer}.subject ${reprinted}`),
     );
   });
 
@@ -560,19 +562,19 @@ describe('reading a broker plan', () => {
   });
 
   test('a command’s Durable consumer filtering on an Event’s subject is malformed, naming its subject', () => {
-    const plan = withConsumer(aPrintedPlan(), chargeCardConsumer, {
+    const plan = withDurableConsumer(aPrintedPlan(), chargeCardDurableConsumer, {
       subject: 'orders-service.event.OrderCreated.v1',
     });
 
     const decoded = decodeBrokerPlan(plan);
 
     expect(decoded).toEqual(
-      malformed(`durableConsumers.${chargeCardConsumer}.subject ${reprinted}`),
+      malformed(`durableConsumers.${chargeCardDurableConsumer}.subject ${reprinted}`),
     );
   });
 
   test('a Subscriber’s Durable consumer reading a Stream other than its subject’s Service’s is malformed, naming its stream', () => {
-    const plan = withConsumer(aPrintedPlan(), 'orders-service_notify-on-settled', {
+    const plan = withDurableConsumer(aPrintedPlan(), 'orders-service_notify-on-settled', {
       stream: 'orders-service',
     });
 
@@ -584,13 +586,13 @@ describe('reading a broker plan', () => {
   });
 
   test('a Stream holding a command’s subject with no Durable consumer for it is malformed, naming the missing name', () => {
-    const { [refundConsumer]: _, ...consumers } = aPrintedPlan().durableConsumers;
+    const { [refundDurableConsumer]: _, ...durableConsumers } = aPrintedPlan().durableConsumers;
 
-    const decoded = decodeBrokerPlan({ ...aPrintedPlan(), durableConsumers: consumers });
+    const decoded = decodeBrokerPlan({ ...aPrintedPlan(), durableConsumers: durableConsumers });
 
     expect(decoded).toEqual(
       malformed(
-        `durableConsumers lacks ${refundConsumer}, which the plan's names print for orders-service`,
+        `durableConsumers lacks ${refundDurableConsumer}, which the plan's names print for orders-service`,
       ),
     );
   });
@@ -654,8 +656,8 @@ function aPlanOfSubjects(count: number) {
 }
 
 /** A plan of orders-service with no Stream and `count` Subscriptions, in code point order. */
-function aPlanOfConsumers(count: number) {
-  const consumers = Array.from({ length: count }, (_, at) => [
+function aPlanOfDurableConsumers(count: number) {
+  const durableConsumers = Array.from({ length: count }, (_, at) => [
     `orders-service_s${at}`,
     {
       service: 'orders-service',
@@ -663,7 +665,9 @@ function aPlanOfConsumers(count: number) {
       subject: `payments-service.event.PaymentSettled.v${at + 1}`,
     },
   ]);
-  const sorted = consumers.toSorted(([left], [right]) => byCodePoint(String(left), String(right)));
+  const sorted = durableConsumers.toSorted(([left], [right]) =>
+    byCodePoint(String(left), String(right)),
+  );
   return { prefix: null, streams: {}, durableConsumers: Object.fromEntries(sorted) };
 }
 
@@ -677,32 +681,37 @@ function aPlanOfStreams(count: number) {
 }
 
 /** A plan whose one Stream, Durable consumer or subject has a text of `length` characters that every grammar refuses. */
-function aPlanWithLongText(site: 'stream' | 'consumer' | 'subject', length: number) {
+function aPlanWithLongText(site: 'stream' | 'durable-consumer' | 'subject', length: number) {
   const subject = `orders-service.event.${site === 'subject' ? `A${'a'.repeat(length)}` : 'OrderCreated'}.v1`;
   const name = site === 'stream' ? `${'a'.repeat(length)}A` : 'orders-service';
-  const consumer =
-    site === 'consumer' ? `orders-service_${'a'.repeat(length)}` : 'orders-service_s';
+  const durableConsumer =
+    site === 'durable-consumer' ? `orders-service_${'a'.repeat(length)}` : 'orders-service_s';
   return {
     prefix: null,
     streams: { [name]: { service: 'orders-service', subjects: [subject] } },
     durableConsumers: {
-      [consumer]: { service: 'orders-service', stream: 'payments-service', subject: subject },
+      [durableConsumer]: {
+        service: 'orders-service',
+        stream: 'payments-service',
+        subject: subject,
+      },
     },
   };
 }
 
 describe('the time to read a plan', () => {
   test('a Stream of many subjects and many Durable consumers are decoded', () => {
-    const decoded = [aPlanOfSubjects(entryCounts.large), aPlanOfConsumers(entryCounts.large)].map(
-      (plan) => decodeBrokerPlan(plan).kind,
-    );
+    const decoded = [
+      aPlanOfSubjects(entryCounts.large),
+      aPlanOfDurableConsumers(entryCounts.large),
+    ].map((plan) => decodeBrokerPlan(plan).kind);
 
     expect(decoded).toEqual(['decoded', 'decoded']);
   });
 
   test.each([
     ['the subjects of its Stream', aPlanOfSubjects, entryCounts],
-    ['its Durable consumers', aPlanOfConsumers, entryCounts],
+    ['its Durable consumers', aPlanOfDurableConsumers, entryCounts],
     ['its Streams, which are refused once all are read', aPlanOfStreams, entryCounts],
   ])('grows linearly with %s', (_, aPlanOf, sizes) => {
     const reading = (size: number) => {
@@ -715,7 +724,7 @@ describe('the time to read a plan', () => {
     expect(order).toBeLessThan(orders.linear);
   });
 
-  test.each(['stream', 'consumer', 'subject'] as const)(
+  test.each(['stream', 'durable-consumer', 'subject'] as const)(
     'refusing a %s of any length grows linearly with it',
     (site) => {
       const refusal = (length: number) => {

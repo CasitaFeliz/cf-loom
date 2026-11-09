@@ -51,19 +51,21 @@ const { printed, refused } = printedPlansOf(5160);
 describe('the plans cf-loom broker-plan prints', () => {
   test('the Services drawn hold every case the decoder acts on, and the longest names', () => {
     const plans = printed.map(({ plan }) => plan);
-    const consumers = plans.flatMap(({ durableConsumers }) => Object.entries(durableConsumers));
-    const ownStream = (consumer: { service: string; stream: string }) =>
-      consumer.stream.endsWith(consumer.service);
+    const durableConsumers = plans.flatMap(({ durableConsumers }) =>
+      Object.entries(durableConsumers),
+    );
+    const ownStream = (durableConsumer: { service: string; stream: string }) =>
+      durableConsumer.stream.endsWith(durableConsumer.service);
 
     const cases = {
       noStream: plans.some(({ streams }) => Object.keys(streams).length === 0),
       aStream: plans.some(({ streams }) => Object.keys(streams).length === 1),
-      commandConsumer: consumers.some(([name]) => name.includes('_command_')),
-      ownEventConsumer: consumers.some(
-        ([name, consumer]) => !name.includes('_command_') && ownStream(consumer),
+      commandDurableConsumer: durableConsumers.some(([name]) => name.includes('_command_')),
+      ownEventDurableConsumer: durableConsumers.some(
+        ([name, durableConsumer]) => !name.includes('_command_') && ownStream(durableConsumer),
       ),
-      providerEventConsumer: consumers.some(
-        ([name, consumer]) => !name.includes('_command_') && !ownStream(consumer),
+      providerEventDurableConsumer: durableConsumers.some(
+        ([name, durableConsumer]) => !name.includes('_command_') && !ownStream(durableConsumer),
       ),
       noPrefix: plans.some(({ prefix }) => prefix === null),
       aPrefix: plans.some(({ prefix }) => prefix !== null),
@@ -169,7 +171,9 @@ function changedOf(next: Next, json: unknown, prefix: string | null): unknown {
     return json;
   }
   const subjects = subjectSitesOf(sites);
-  const consumers = sites.filter(({ isKey, path }) => isKey && path[0] === 'durableConsumers');
+  const durableConsumers = sites.filter(
+    ({ isKey, path }) => isKey && path[0] === 'durableConsumers',
+  );
   const [first, second] = [pick(next, subjects), pick(next, subjects)];
   const draw = next();
   if (draw < 0.5) {
@@ -180,7 +184,7 @@ function changedOf(next: Next, json: unknown, prefix: string | null): unknown {
   if (draw < 0.75 && first !== undefined && second !== undefined) {
     return withText(withText(json, first, second.text), second, first.text);
   }
-  const dropped = pick(next, consumers);
+  const dropped = pick(next, durableConsumers);
   return dropped === undefined ? json : withoutEntry(json, dropped.path);
 }
 
