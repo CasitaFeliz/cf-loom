@@ -167,6 +167,35 @@ export function defsNamedApartFromOne(count: number): Shape {
   return { baseline: publishedFirst(baseline), proposed };
 }
 
+/**
+ * One Endpoint whose body holds `count` fields, each naming its own def of one field that names the
+ * one def `b` of two fields; the proposed Snapshot names one def `p` from all, whose field writes
+ * in place what `b` holds, one field short.
+ */
+export function defsMergedIntoOneWrittenInline(count: number): Shape {
+  const names = Array.from({ length: count }, (_, index) => `x${index}`);
+  const bodyNaming = (name: (index: number) => string) =>
+    anObject({
+      id: required(aString),
+      ...Object.fromEntries(names.map((_, index) => [`f${index}`, required(aRef(name(index)))])),
+    });
+  const held = anObject({ k: required(aString), gone: optional(aString) });
+  const baselineDefs = names.map((name): [string, SchemaNode] => [
+    name,
+    anObject({ a: required(aRef('b')) }),
+  ]);
+  const baseline = aServiceOf(
+    { 'PUT /e': anEndpointOf(bodyNaming((index) => `x${index}`)) },
+    { b: held, ...Object.fromEntries(baselineDefs) },
+  );
+  const written = anObject({ k: required(aString) });
+  const proposed = aServiceOf(
+    { 'PUT /e': anEndpointOf(bodyNaming(() => 'p')) },
+    { p: anObject({ a: required(written) }) },
+  );
+  return { baseline: publishedFirst(baseline), proposed };
+}
+
 /** `count` codes an Endpoint answers in the Baseline and no longer in the proposed Snapshot, beside a chain of `count` defs none of them reaches. */
 export function codesNoEndpointAnswersBesideDefs(count: number): Shape {
   const names = Array.from({ length: count }, (_, index) => `LOCKED_${index}`);

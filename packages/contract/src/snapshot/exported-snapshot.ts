@@ -1,6 +1,6 @@
 import { isLive } from '../declarations/index.ts';
 import { unbrokenLineOf } from '../lines/index.ts';
-import { defsReachedOf } from '../walker/index.ts';
+import { defGraphOf } from '../walker/index.ts';
 import { type EndpointPath, endpointPathOf, matchedOf, sharedUrlOf } from '../wire/index.ts';
 import { reachedCodesOf } from '../written/index.ts';
 import { codeNodesOf, endpointNodesOf, guardNodesOf } from './nodes.ts';
@@ -91,7 +91,7 @@ function cutOf(
     ...Object.values(guards).flatMap(guardNodesOf),
     ...Object.values(codes).flatMap(codeNodesOf),
   ];
-  const defs = defsReachedOf(nodes, snapshot.defs);
+  const { held: defs } = defGraphOf(snapshot.defs).reached(nodes);
   return { format: snapshot.format, defs, endpoints, events, guards, codes };
 }
 

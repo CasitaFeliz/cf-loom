@@ -25,10 +25,10 @@ import { validatedAnswering } from '../../test/validated-answering.ts';
 import { defineEndpoint, defineGroup, defineService } from '../index.ts';
 import {
   compatibilityReportOf,
+  defGraphOf,
   exportedSnapshotOf,
   hashedTextOf,
   publishedSnapshotOf,
-  reachedDefsOf,
   refusalsIn,
   type SchemaNode,
   siteTextOf,
@@ -1842,7 +1842,7 @@ describe('walkSchemas: recursion', () => {
     return ring[0] ?? z.never();
   }
 
-  /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
+  /** A growth test times its shape many times over, which a CI runner that several runs share stretches several times over. */
   const growthTimeout = 240_000;
 
   test('a ring of 255 schemas walks each once', { timeout: growthTimeout }, () => {
@@ -2012,7 +2012,7 @@ describe('walkSchemas: recursion', () => {
    */
   const memoCpuRatio = 3;
 
-  /** Each chain is walked up to four times, the refused one many times longer with the memo off. */
+  /** Each chain is walked many times, the refused one many times longer with the memo off. */
   const memoTimeout = 240_000;
 
   test('a chain of 7,000 ids on no cycle, around a refused schema 250 arrays deep, tells each id once', {
@@ -2815,7 +2815,7 @@ describe('walkSchemas: recursion', () => {
     /** A schema 255 arrays around a `z.lazy()` back to the schema holding it: cut for its depth. */
     const cutBack = (self: () => z.ZodType) => ({ deep: arraysAround(255, z.lazy(self)) });
 
-    /** A fan walked again at every use takes seconds a run, and `orderOf` runs it up to nine times. */
+    /** A fan walked again at every use takes seconds a run, and `orderOf` runs it many times. */
     const fanTimeout = 240_000;
 
     function orderOfFans(
@@ -2965,14 +2965,14 @@ describe('walkSchemas: recursion', () => {
   });
 });
 
-describe('reachedDefsOf', () => {
+describe('defGraphOf reached', () => {
   const ref = (name: string): SchemaNode => ({ type: 'ref', name });
   const holding = (node: SchemaNode): SchemaNode => ({ type: 'array', items: node });
 
-  test('defs reached through several refs are named in the order the nodes hold them, depth first', () => {
+  test('defs reached through several refs are held in code point order, however the nodes hold them', () => {
     const both: SchemaNode = {
       type: 'object',
-      fields: { a: { required: true, schema: ref('a') }, b: { required: true, schema: ref('b') } },
+      fields: { b: { required: true, schema: ref('b') }, a: { required: true, schema: ref('a') } },
     };
     const defs = {
       a: holding(ref('c')),
@@ -2981,29 +2981,39 @@ describe('reachedDefsOf', () => {
       d: { type: 'string' },
     } as const;
 
-    const names = reachedDefsOf([both, ref('e')], { ...defs, e: { type: 'string' } });
+    const { held, unheld } = defGraphOf({ ...defs, e: { type: 'string' } }).reached([
+      both,
+      ref('e'),
+    ]);
 
-    expect(names).toEqual(['a', 'b', 'c', 'd', 'e']);
+    expect(Object.keys(held)).toEqual(['a', 'b', 'c', 'd', 'e']);
+    expect(unheld).toEqual([]);
   });
 
   test.each([
     {
       reach: 'a chain whose last def closes a cycle',
       defs: { a: holding(ref('b')), b: holding(ref('c')), c: holding(ref('a')), d: ref('a') },
-      reached: ['a', 'b', 'c'],
+      held: ['a', 'b', 'c'],
+      unheld: [],
     },
     {
       reach: 'a ref that names no def',
       defs: { a: holding(ref('gone')), d: ref('a') },
-      reached: ['a', 'gone'],
+      held: ['a'],
+      unheld: ['gone'],
     },
-  ])('the def names nodes reach through $reach are each named once', ({ defs, reached }) => {
-    const nodes = [holding(ref('a')), ref('a')];
+  ])(
+    'the defs nodes reach through $reach are each held or listed apart once',
+    ({ defs, held, unheld }) => {
+      const nodes = [holding(ref('a')), ref('a')];
 
-    const names = reachedDefsOf(nodes, defs);
+      const reached = defGraphOf(defs).reached(nodes);
 
-    expect(names).toEqual(reached);
-  });
+      expect(Object.keys(reached.held)).toEqual(held);
+      expect(reached.unheld).toEqual(unheld);
+    },
+  );
 });
 
 /** How deep the depth tests nest: past every depth at which a walk on the call stack overflowed. */

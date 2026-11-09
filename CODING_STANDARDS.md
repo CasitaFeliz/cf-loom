@@ -63,12 +63,11 @@ Contract, by [COMPATIBILITY.md](COMPATIBILITY.md); the Snapshot format, which th
 wrote ([SNAPSHOT.md](SNAPSHOT.md)); the Wire protocol ([ARCHITECTURE.md](ARCHITECTURE.md#wire-protocol)); and the
 packages' public APIs, by semver through Changesets.
 
-**C6. Split a file by responsibility, never by count.** A file holds at most 200 lines, blank lines not counted
-**(lint)**; tests and generated files are exempt. When a file nears the cap, name the two responsibilities it holds
-(walking a schema and checking what it allows, matching an Endpoint and converting its text) and give each its own
-file with its own name; a file of one trivial function joins its caller. Never `part-1`, `-helpers`, `-utils`,
-`-extra`. *Why:* the cap is a cohesion check, not a length check; a mechanical split keeps the tangle and hides it
-across files.
+**C6. Split a file by responsibility, never by count.** A file holds at most 200 lines, blank and comment-only lines not
+counted **(lint)**; tests and generated files are exempt. When a file nears the cap, name the two responsibilities it
+holds (walking a schema and checking what it allows, matching an Endpoint and converting its text) and give each its own
+file with its own name; a file of one trivial function joins its caller. Never `part-1`, `-helpers`, `-utils`, `-extra`.
+*Why:* the cap is a cohesion check, not a length check; a mechanical split keeps the tangle and hides it across files.
 
 When a file holds ONE responsibility and splitting it would only scatter that responsibility across files that import
 each other, keep it whole and lift the cap for that file alone, with the reason on the directive: `// biome-ignore-all
@@ -320,11 +319,11 @@ where the special cases came from.
 
 ## Mechanical and judgment
 
-Biome enforces, as errors: the file cap of 200 lines (C6, `noExcessiveLinesPerFile`), the function cap of 30 lines
-(C7, `noExcessiveLinesPerFunction`), `noUselessElse` and a cognitive complexity of 15 (C8,
-`noExcessiveCognitiveComplexity`), `noNestedTernary` (C11), `useExhaustiveSwitchCases` (C16), at most three
-parameters (C19, `useMaxParams`), and `noFocusedTests`, `noSkippedTests` and `useExpect` (C25). Blank lines do not
-count toward either cap; tests and generated files are exempt from both. The formatter wraps lines at 100 characters
+Biome enforces, as errors: the file cap of 200 lines (C6, `noExcessiveLinesPerFile`), the function cap of 30 lines (C7,
+`noExcessiveLinesPerFunction`), `noUselessElse` and a cognitive complexity of 15 (C8, `noExcessiveCognitiveComplexity`),
+`noNestedTernary` (C11), `useExhaustiveSwitchCases` (C16), at most three parameters (C19, `useMaxParams`), and
+`noFocusedTests`, `noSkippedTests` and `useExpect` (C25). Blank lines do not count toward either cap, nor comment-only
+lines toward the file cap; tests and generated files are exempt from both. The formatter wraps lines at 100 characters
 (C9). Type and import rules already configured in `biome.json` (`noExplicitAny`, `useImportType`, `noDefaultExport`,
 naming conventions) apply as well.
 

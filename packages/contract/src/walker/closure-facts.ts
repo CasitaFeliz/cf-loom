@@ -1,45 +1,48 @@
-import { defNamed, refsWrittenIn } from './def-graph.ts';
+import { refsWrittenIn } from './children.ts';
 import type { SchemaNode } from './nodes.ts';
 import type { Defs } from './walk.ts';
 
-/**
- * Each def's facts together with those of every def it reaches through `ref`s, from the facts each
- * holds in its own nodes, a name some `ref` gives with no def included as a def of no node: each
- * fact is carried back along each `ref` once, so the time grows with the defs, their nodes and the
- * facts, never with how deep a def reaches.
- */
-export function closureFactsOf<Fact>(
-  defs: Defs,
-  ownFactsOf: (name: string, def: SchemaNode | undefined) => Iterable<Fact>,
-): ReadonlyMap<string, ReadonlySet<Fact>> {
-  const referrers = referrersOf(defs);
-  const names = new Set([...Object.keys(defs), ...referrers.keys()]);
-  const facts = new Map([...names].map((name): [string, Set<Fact>] => [name, new Set()]));
-  const own: [string, Fact][] = [];
-  for (const name of names) {
-    const def = defNamed(defs, name);
-    for (const fact of ownFactsOf(name, def)) {
-      own.push([name, fact]);
-    }
-  }
-  carryBack(own, referrers, facts);
-  return facts;
-}
+/** The defs whose nodes write a `ref` to each name, and every name a def or a `ref` gives. */
+export type Referrers = {
+  readonly namesGiven: ReadonlySet<string>;
+  readonly referrersByName: ReadonlyMap<string, readonly string[]>;
+};
 
-/** The defs whose nodes write a `ref` to each name. */
-function referrersOf(defs: Defs): Map<string, string[]> {
-  const referrers = new Map<string, string[]>();
+/** The referrers of a Defs, found by reading each def's own nodes once. */
+export function referrersOf(defs: Defs): Referrers {
+  const namesGiven = new Set(Object.keys(defs));
+  const referrersByName = new Map<string, string[]>();
   for (const [name, def] of Object.entries(defs)) {
     for (const target of refsWrittenIn(def)) {
-      const held = referrers.get(target);
+      namesGiven.add(target);
+      const held = referrersByName.get(target);
       if (held === undefined) {
-        referrers.set(target, [name]);
+        referrersByName.set(target, [name]);
       } else {
         held.push(name);
       }
     }
   }
-  return referrers;
+  return { namesGiven, referrersByName };
+}
+
+/** The closure facts of the defs the referrers index, from the facts `ownFactsOf` gives each. */
+export function closureFactsFrom<Fact>(
+  referrers: Referrers,
+  def: (name: string) => SchemaNode | undefined,
+  ownFactsOf: (name: string, def: SchemaNode | undefined) => Iterable<Fact>,
+): ReadonlyMap<string, ReadonlySet<Fact>> {
+  const facts = new Map(
+    [...referrers.namesGiven].map((name): [string, Set<Fact>] => [name, new Set()]),
+  );
+  const own: [string, Fact][] = [];
+  for (const name of referrers.namesGiven) {
+    for (const fact of ownFactsOf(name, def(name))) {
+      own.push([name, fact]);
+    }
+  }
+  carryBack(own, referrers.referrersByName, facts);
+  return facts;
 }
 
 /** Adds each fact to the def that holds it and to every def that reaches that one, each pair once. */

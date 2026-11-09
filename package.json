@@ -16,6 +16,7 @@
     "@biomejs/biome": "catalog:",
     "@changesets/cli": "catalog:",
     "@types/node": "catalog:",
+    "marked": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:",

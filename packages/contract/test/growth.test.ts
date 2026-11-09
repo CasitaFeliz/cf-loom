@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { growthTimeout } from '../vitest.growth.config.ts';
-import { orderOf, orders } from './growth.ts';
+import { collectedOnce } from './collected.ts';
+import { cpuRatioOf, orderOf, orders } from './growth.ts';
 
 const sizes = { small: 2_000, large: 16_000 };
 
@@ -53,6 +54,40 @@ function lookingUpThousandNames(size: number) {
   };
 }
 
+/** A scan of the names for each of them, absent, over a fortieth of the size: n²/1,600 comparisons, a run under a tick of the CPU clock. */
+function scanningFortiethOfNames(size: number) {
+  const names = namesOf(size / 40);
+  return () => {
+    let found = 0;
+    for (const name of names) {
+      found += names.includes(`absent${name}`) ? 1 : 0;
+    }
+    return found;
+  };
+}
+
+/**
+ * `prepare`, whose first `times` runs at `waitingSize` each wait a quarter of a second for a core,
+ * as a preempted run does: they take wall time and no CPU time.
+ */
+function waitingAtFirst(
+  prepare: (size: number) => () => unknown,
+  waitingSize: number,
+  times: number,
+) {
+  let waits = 0;
+  return (size: number) => {
+    const call = prepare(size);
+    return () => {
+      if (size === waitingSize && waits < times) {
+        waits++;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+      }
+      return call();
+    };
+  };
+}
+
 /** A walk of every subset of `size` items, counting the members of each: n times 2 to the n steps. */
 function walkingEverySubset(size: number) {
   return () => {
@@ -66,6 +101,99 @@ function walkingEverySubset(size: number) {
   };
 }
 
+const fixtureDoubles = 8_192;
+const fixtureBytes = fixtureDoubles * Float64Array.BYTES_PER_ELEMENT;
+
+/** One try of `orderOf`: the heap in use when it began, after a full collection, and the fixtures it built. */
+type Try = { readonly heapUsedAtStart: number; fixtures: number };
+
+/**
+ * Fixtures of 8,192 doubles on the heap, 64 KB each, whose run reads them for about `size`
+ * milliseconds, and the tries they were built for: a build after a run begins a try.
+ */
+function fixturesOfTries() {
+  const tries: Try[] = [];
+  let current: Try = { heapUsedAtStart: 0, fixtures: 0 };
+  let ranSinceBuild = true;
+  const prepare = (size: number) => {
+    if (ranSinceBuild) {
+      ranSinceBuild = false;
+      collectedOnce();
+      current = { heapUsedAtStart: process.memoryUsage().heapUsed, fixtures: 0 };
+      tries.push(current);
+    }
+    current.fixtures++;
+    const fixture = Array.from({ length: fixtureDoubles }, (_, index) => index + 0.5);
+    return () => {
+      ranSinceBuild = true;
+      let sum = 0;
+      for (let pass = 0; pass < size * 122; pass++) {
+        for (const value of fixture) {
+          sum += value;
+        }
+      }
+      return sum;
+    };
+  };
+  return { prepare, tries };
+}
+
+/** The work of a cold run in warm runs: more than the 6 a cold span was seen to cost, so a cold call beside it still reads under a ceiling of 3. */
+const coldPasses = 20;
+
+const heapReadEvery = 16_384;
+
+/** The bytes an array holds for each reference it lists. */
+const slotBytes = Float64Array.BYTES_PER_ELEMENT;
+
+/**
+ * A step of 512 additions, which takes tens of nanoseconds, as a call, with the most heap in use
+ * that one of its runs saw, read once in every 16,384 runs.
+ */
+function stepSeeingTheHeap() {
+  const seen = { runs: 0, mostHeapUsed: 0 };
+  const call = () => {
+    seen.runs++;
+    if (seen.runs % heapReadEvery === 0) {
+      seen.mostHeapUsed = Math.max(seen.mostHeapUsed, process.memoryUsage().heapUsed);
+    }
+    return additionsOfTheStep();
+  };
+  return { call, seen };
+}
+
+/** The 512 additions of the step, as a call that reads no heap. */
+function additionsOfTheStep() {
+  let sum = 0;
+  for (let index = 0; index < 512; index++) {
+    sum += index;
+  }
+  return sum;
+}
+
+/**
+ * `call` and `reference` as a cold first span makes them: `reference` does `coldPasses` times its
+ * work until `call` has run once, which slows exactly its first span and the tries that size it,
+ * without a clock, and costs CPU time, which a wait for a core does not. It relies on the reference
+ * being timed first in each span: a helper that timed the call first would never fire the gate.
+ */
+function withColdReference(call: () => unknown, reference: () => unknown) {
+  let called = false;
+  return {
+    call: () => {
+      called = true;
+      return call();
+    },
+    reference: () => {
+      let result: unknown;
+      for (let pass = 0; pass < (called ? 1 : coldPasses); pass++) {
+        result = reference();
+      }
+      return result;
+    },
+  };
+}
+
 describe('orderOf', () => {
   test('a read of each name once is under the linear order', { timeout: growthTimeout }, () => {
     const order = orderOf(readingEachName, sizes, orders.linear);
@@ -75,6 +203,36 @@ describe('orderOf', () => {
 
   test('a read of each name once reaches the flat order', { timeout: growthTimeout }, () => {
     const order = orderOf(readingEachName, sizes, orders.flat);
+
+    expect(order).toBeGreaterThanOrEqual(orders.flat);
+  });
+
+  test('a quadratic scan of a fortieth of the names, whose first runs at the large size wait for a core, reaches the linear order', {
+    timeout: growthTimeout,
+  }, () => {
+    const waiting = waitingAtFirst(scanningFortiethOfNames, sizes.large, 3);
+
+    const order = orderOf(waiting, sizes, orders.linear);
+
+    expect(order).toBeGreaterThanOrEqual(orders.linear);
+  });
+
+  test('a read of each name once, whose first runs at the large size wait for a core, reaches the flat order', {
+    timeout: growthTimeout,
+  }, () => {
+    const waiting = waitingAtFirst(readingEachName, sizes.large, 3);
+
+    const order = orderOf(waiting, sizes, orders.flat);
+
+    expect(order).toBeGreaterThanOrEqual(orders.flat);
+  });
+
+  test('a read of each name once, whose first 18 runs at the small size wait for a core, reaches the flat order', {
+    timeout: growthTimeout,
+  }, () => {
+    const waiting = waitingAtFirst(readingEachName, sizes.small, 18);
+
+    const order = orderOf(waiting, sizes, orders.flat);
 
     expect(order).toBeGreaterThanOrEqual(orders.flat);
   });
@@ -105,6 +263,17 @@ describe('orderOf', () => {
     expect(order).toBeGreaterThanOrEqual(orders.polynomial);
   });
 
+  test("a try holds none of an earlier try's fixtures", { timeout: growthTimeout }, () => {
+    const { prepare, tries } = fixturesOfTries();
+
+    orderOf(prepare, { small: 1, large: 8 }, orders.linear);
+
+    const heapAtStarts = tries.map(({ heapUsedAtStart }) => heapUsedAtStart);
+    const heldByLaterTries = Math.max(...heapAtStarts) - Math.min(...heapAtStarts);
+    const largestTryBytes = Math.max(...tries.map(({ fixtures }) => fixtures)) * fixtureBytes;
+    expect(heldByLaterTries).toBeLessThan(largestTryBytes / 2);
+  });
+
   test("a bound of a test's own is refused", () => {
     const reading = (size: number) => () => size;
 
@@ -112,5 +281,41 @@ describe('orderOf', () => {
     const refused = () => orderOf(reading, sizes, 13);
 
     expect(refused).toBeTypeOf('function');
+  });
+});
+
+describe('cpuRatioOf', () => {
+  test('a read of 16,000 names takes at least twice the CPU time of a read of 2,000', {
+    timeout: growthTimeout,
+  }, () => {
+    const large = readingEachName(16_000);
+    const small = readingEachName(2_000);
+
+    const ratio = cpuRatioOf(large, small, 2);
+
+    expect(ratio).toBeGreaterThanOrEqual(2);
+  });
+
+  test('a read of 16,000 names takes at least three times the CPU time of a read of 2,000 whose first span runs cold', {
+    timeout: growthTimeout,
+  }, () => {
+    const cold = withColdReference(readingEachName(16_000), readingEachName(2_000));
+
+    const ratio = cpuRatioOf(cold.call, cold.reference, 3);
+
+    expect(ratio).toBeGreaterThanOrEqual(3);
+  });
+
+  test('a call of tens of nanoseconds holds no memory for each of its runs', {
+    timeout: growthTimeout,
+  }, () => {
+    const { call, seen } = stepSeeingTheHeap();
+    collectedOnce();
+    const heapUsedBefore = process.memoryUsage().heapUsed;
+
+    cpuRatioOf(call, additionsOfTheStep, 2);
+
+    const heldForEachRun = (seen.mostHeapUsed - heapUsedBefore) / seen.runs;
+    expect(heldForEachRun).toBeLessThan(slotBytes / 2);
   });
 });

@@ -3540,7 +3540,7 @@ describe('decodeSnapshot reads a wide Snapshot without throwing', () => {
 });
 
 describe('decodeSnapshot, the Former Inputs of a published Snapshot', () => {
-  /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
+  /** A growth test times its shape many times over, which a CI runner that several runs share stretches several times over. */
   const growthTimeout = 240_000;
 
   const sizes = { small: 1_000, large: 8_000 };

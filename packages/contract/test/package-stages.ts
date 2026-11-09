@@ -7,13 +7,12 @@ import {
   exportedSnapshotOf,
   hashedTextOf,
   providedSnapshotOf,
-  reachedDefsOf,
 } from '../src/internal/index.ts';
 import { anEchoTaking, identity, inputOf } from './chain-fixtures.ts';
 import { aProvider } from './providers.ts';
 import { defsOfText, type StagesOf, stage } from './stage-type.ts';
 
-/** What `package` and an Application read a chain with: the cut, its text, its hash, the defs it reaches and the cut a Provided Endpoint carries. */
+/** What `package` and an Application read a chain with: the cut, its text, its hash and the cut a Provided Endpoint carries. */
 export const packageStages = {
   exportedSnapshotOf: [
     stage(
@@ -45,17 +44,6 @@ export const packageStages = {
       (given, count) => expect(defsOfText(given)).toBe(count),
     ),
   ],
-  reachedDefsOf: [
-    stage(
-      'package reaches the defs',
-      (chain, count) => {
-        const { defs } = inputOf(chain, count, 'grafted');
-        const top = defs[`link${count - 1}`] ?? { type: 'string' };
-        return () => reachedDefsOf([top], defs);
-      },
-      (given, count) => expect(given).toHaveLength(count),
-    ),
-  ],
   providedSnapshotOf: [
     stage(
       "an Application reads a Provided Endpoint's cut",
@@ -69,5 +57,5 @@ export const packageStages = {
     ),
   ],
 } as const satisfies StagesOf<
-  'exportedSnapshotOf' | 'exportedCutOf' | 'hashedTextOf' | 'reachedDefsOf' | 'providedSnapshotOf'
+  'exportedSnapshotOf' | 'exportedCutOf' | 'hashedTextOf' | 'providedSnapshotOf'
 >;

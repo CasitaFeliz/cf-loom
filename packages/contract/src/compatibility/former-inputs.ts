@@ -7,7 +7,7 @@ import type {
 import type { Defs } from '../walker/index.ts';
 import { classificationOf } from './classes.ts';
 import { endpointSiteOf, inputBodyDifferencesOf, queryDifferencesOf } from './endpoints.ts';
-import { type GraftSource, graftedInputOf, type ReadDefs, readDefsOf } from './grafting.ts';
+import { type GraftSource, graftedInputOf } from './grafting.ts';
 import { comparedShapesOf, type Pair, pairsOf } from './pairs.ts';
 import type { ChangeSite, Difference } from './report.ts';
 
@@ -84,27 +84,17 @@ export function formerInputsMerged(
   version: string,
 ): readonly FormerInput[] {
   const { baseline, proposed } = checked;
-  const merge = {
-    checked,
-    read: { baseline: readDefsOf(baseline.defs), proposed: readDefsOf(proposed.defs) },
-  };
   return pairsOf(baseline.endpoints, proposed.endpoints).flatMap((pair) =>
-    keptFormerInputsOf(pair, merge, version),
+    keptFormerInputsOf(pair, checked, version),
   );
 }
-
-/** The Check of a merge: the Service and its Baseline, and the reader of each one's alias defs, built once for the merge. */
-type Merge = {
-  readonly checked: CheckedService;
-  readonly read: { readonly baseline: ReadDefs; readonly proposed: ReadDefs };
-};
 
 /** A former Input to rewrite, under the heading it is kept with. */
 type Rewritten = Pick<FormerInput, 'endpoint' | 'removedIn'> & { readonly source: GraftSource };
 
 function keptFormerInputsOf(
   pair: Pair<EndpointSnapshot>,
-  merge: Merge,
+  checked: CheckedService,
   version: string,
 ): readonly FormerInput[] {
   const compared = comparedShapesOf(pair);
@@ -115,16 +105,16 @@ function keptFormerInputsOf(
   const own: Rewritten = {
     endpoint: pair.identity,
     removedIn: version,
-    source: { input: { query, body }, ...merge.read.baseline },
+    source: { input: { query, body }, defs: checked.baseline.defs },
   };
-  const stored = (merge.checked.formers.get(pair.identity) ?? []).map(
+  const stored = (checked.formers.get(pair.identity) ?? []).map(
     (former): Rewritten => ({
       endpoint: former.endpoint,
       removedIn: former.removedIn,
-      source: { input: former.input, ...readDefsOf(former.defs) },
+      source: { input: former.input, defs: former.defs },
     }),
   );
-  const onto = { input: compared.proposed.input, ...merge.read.proposed };
+  const onto = { input: compared.proposed.input, defs: checked.proposed.defs };
   const kept: FormerInput[] = [];
   for (const { source, ...heading } of [...stored, own]) {
     const grafted = graftedInputOf(source, onto);
