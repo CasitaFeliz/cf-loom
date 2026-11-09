@@ -1,6 +1,6 @@
-import type { MarkedToken } from 'marked';
 import { Lexer, marked } from 'marked';
 import { describe, expect, it } from 'vitest';
+import { aSeededDraw, tokenTypes } from './markdown-containers.ts';
 import type { ReadmeProblem } from './pinned-readme.ts';
 import { pinnedReadme } from './pinned-readme.ts';
 
@@ -527,31 +527,6 @@ function casesOf(inContainers: Record<string, (form: string) => string>): Case[]
   return cases;
 }
 
-const tokenTypes: Record<MarkedToken['type'], true> = {
-  blockquote: true,
-  br: true,
-  checkbox: true,
-  code: true,
-  codespan: true,
-  def: true,
-  del: true,
-  em: true,
-  escape: true,
-  heading: true,
-  hr: true,
-  html: true,
-  image: true,
-  link: true,
-  list: true,
-  // biome-ignore lint/style/useNamingConvention: marked names this token type list_item
-  list_item: true,
-  paragraph: true,
-  space: true,
-  strong: true,
-  table: true,
-  text: true,
-};
-
 const markedEscapes = /&(?:amp|lt|gt|quot|#39);/g;
 const characterReference = /&(?:#[0-9]+|#x[0-9a-f]+|[a-z][a-z0-9]*);/i;
 
@@ -634,28 +609,7 @@ const repeatedContainers: Record<string, Container> = {
     copies.map((copy) => `> > ${indented(copy, '> > ')}`).join('\n> >\n'),
 };
 
-/**
- * A link split over two lines inside these containers has its source rewritten by `marked`, which takes the markers
- * or the indentation out of it, so `locatedTokens` names its target inside its container, at the cursor or at a
- * later identical copy. The READMEs drawn here write every copy alike, so the test holds it to the cursor: at or
- * above the line of its own link and not above its container.
- */
-const containersThatRewriteSplitLinks = new Set([
-  'a quote',
-  'a list paragraph',
-  'a list in a quote',
-  'a nested quote',
-]);
-
-const splitLink = 'a link split over two lines';
-
 type Block = { readonly form: string; readonly target: string; readonly leadsWithText: boolean };
-
-/**
- * The lines a README must name, and the lines of its split links' targets, which it may name above them instead:
- * the only lines this test lets a problem miss. A mention of the repository in a split link keeps its line.
- */
-type ExpectedLines = { readonly exact: readonly number[]; readonly splitLinks: readonly number[] };
 
 function linesOfText(text: string): number {
   return text.split('\n').length;
@@ -670,23 +624,8 @@ function problemLinesOf(readme: string): number[] {
   return problemsOf(readme).map(({ line }) => line);
 }
 
-function isLinkTargetProblem({ problem }: ReadmeProblem): boolean {
-  return problem.startsWith('the link target');
-}
-
 function readmeOf(container: Container, copies: readonly string[]): string {
   return `${header}\n\n${container(copies)}\n`;
-}
-
-/** A generator that draws the same sequence on every run (mulberry32). */
-function aSeededDraw(seed: number): () => number {
-  let state = seed;
-  return () => {
-    state = (state + 0x6d2b79f5) | 0;
-    let mixed = Math.imul(state ^ (state >>> 15), 1 | state);
-    mixed = (mixed + Math.imul(mixed ^ (mixed >>> 7), 61 | mixed)) ^ mixed;
-    return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
-  };
 }
 
 function copyOf(block: Block, label: string): string {
@@ -696,47 +635,25 @@ function copyOf(block: Block, label: string): string {
 }
 
 /** What each copy names when it stands alone in the container, moved to where the copy stands in the README. */
-function expectedLinesOf(
-  [containerName, container]: readonly [string, Container],
-  blocks: readonly Block[],
-  copies: readonly string[],
-): ExpectedLines {
-  const exact: number[] = [];
-  const splitLinks: number[] = [];
-  for (const [index, block] of blocks.entries()) {
-    const own = copies[index] as string;
+function expectedLinesOf(container: Container, copies: readonly string[]): number[] {
+  const expected: number[] = [];
+  for (const [index, own] of copies.entries()) {
     const start =
       linesOfText(container(copies.slice(0, index + 1))) - linesOfText(container([own]));
-    const isRewritten =
-      block.form === splitLink && containersThatRewriteSplitLinks.has(containerName);
     for (const found of problemsOf(readmeOf(container, [own]))) {
-      const isLoose = isRewritten && isLinkTargetProblem(found);
-      (isLoose ? splitLinks : exact).push(found.line + start);
+      expected.push(found.line + start);
     }
   }
-  return { exact, splitLinks };
+  return expected;
 }
 
 /** What differs between the lines a README names and the lines it must, or `undefined` when nothing does. */
-function mismatchOf(named: readonly number[], expected: ExpectedLines): string | undefined {
-  const leftover = [...named];
-  const missing: number[] = [];
-  for (const line of expected.exact) {
-    const at = leftover.indexOf(line);
-    if (at === -1) {
-      missing.push(line);
-    } else {
-      leftover.splice(at, 1);
-    }
-  }
-  const links = [...expected.splitLinks].sort((first, second) => first - second);
-  const rest = leftover.sort((first, second) => first - second);
-  const misplaced = rest.filter((line, index) => line < blockLine || line > (links[index] ?? 0));
-  const isCountRight = rest.length === links.length;
-  if (missing.length === 0 && misplaced.length === 0 && isCountRight) {
+function mismatchOf(named: readonly number[], expected: readonly number[]): string | undefined {
+  const sorted = (lines: readonly number[]) => [...lines].sort((first, second) => first - second);
+  if (JSON.stringify(sorted(named)) === JSON.stringify(sorted(expected))) {
     return undefined;
   }
-  return `missing ${missing}, misplaced ${misplaced}, left over ${rest}`;
+  return `named ${sorted(named)}, expected ${sorted(expected)}`;
 }
 
 describe('pinnedReadme over a block repeated in a container', () => {
@@ -763,7 +680,7 @@ describe('pinnedReadme over a block repeated in a container', () => {
     return Array.from({ length }, () => (draw() < 0.7 ? first : aBlock()));
   }
 
-  it('names each problem on the line of its own copy, a split link excepted', () => {
+  it('names each problem on the line of its own copy, in every container', () => {
     const wrong: string[] = [];
     const drawn = {
       forms: new Set<string>(),
@@ -776,7 +693,7 @@ describe('pinnedReadme over a block repeated in a container', () => {
         const copies = blocks.map((block, index) => copyOf(block, String(index)));
         const mismatch = mismatchOf(
           problemLinesOf(readmeOf(entry[1], copies)),
-          expectedLinesOf(entry, blocks, copies),
+          expectedLinesOf(entry[1], copies),
         );
         if (mismatch !== undefined) {
           wrong.push(`${entry[0]}: ${mismatch} in ${JSON.stringify(copies)}`);

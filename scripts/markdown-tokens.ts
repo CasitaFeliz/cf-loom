@@ -1,8 +1,16 @@
-import type { MarkedToken, Token } from 'marked';
+import type { MarkedToken, Token, Tokens } from 'marked';
 import { Lexer } from 'marked';
 
-/** A token of a Markdown text with the line where its source starts. */
-export type LocatedToken = { readonly token: MarkedToken; readonly line: number };
+/** A token of a Markdown text with the line where its source starts, and the token that holds it. */
+export type LocatedToken = {
+  readonly token: MarkedToken;
+  readonly line: number;
+  /** The token whose children it is, `undefined` at the top level; a table cell's tokens have the table. */
+  readonly parent: MarkedToken | undefined;
+};
+
+/** A token and the number of lines between the start of what holds it and the start of its own source. */
+type Child = { readonly token: MarkedToken; readonly offset: number };
 
 /**
  * The lexer's tokens as `MarkedToken`s. No extension is registered, so the lexer yields no `Tokens.Generic`, the
@@ -12,7 +20,8 @@ function markedTokens(tokens: readonly Token[]): readonly MarkedToken[] {
   return tokens as readonly MarkedToken[];
 }
 
-function childrenOf(token: MarkedToken): readonly MarkedToken[] {
+/** The tokens a token holds, which together make up its source token by token. */
+function contentOf(token: MarkedToken): readonly MarkedToken[] {
   switch (token.type) {
     case 'blockquote':
     case 'del':
@@ -28,10 +37,6 @@ function childrenOf(token: MarkedToken): readonly MarkedToken[] {
       return markedTokens(token.tokens ?? []);
     case 'list':
       return token.items;
-    case 'table': {
-      const cells = [...token.header, ...token.rows.flat()];
-      return markedTokens(cells.flatMap((cell) => cell.tokens));
-    }
     case 'br':
     case 'checkbox':
     case 'code':
@@ -41,68 +46,74 @@ function childrenOf(token: MarkedToken): readonly MarkedToken[] {
     case 'hr':
     case 'html':
     case 'space':
+    case 'table':
       return [];
   }
 }
 
-/** The line, counted from 1, that holds the offset `at`: the number of line starts at or before it. */
-function lineAt(lineStarts: readonly number[], at: number): number {
-  let low = 0;
-  let high = lineStarts.length;
-  while (low < high) {
-    const middle = Math.floor((low + high) / 2);
-    const start = lineStarts[middle];
-    if (start !== undefined && start <= at) {
-      low = middle + 1;
-    } else {
-      high = middle;
-    }
+function breaksIn(text: string): number {
+  let breaks = 0;
+  for (let at = text.indexOf('\n'); at !== -1; at = text.indexOf('\n', at + 1)) {
+    breaks++;
   }
-  return low;
+  return breaks;
 }
 
-type Frame = {
-  readonly tokens: readonly MarkedToken[];
-  next: number;
-  cursor: number;
-  readonly end: number;
-};
+/** Each token with the line it starts on, `start` lines after the start of what holds them: the line breaks of the tokens before it. */
+function tiled(tokens: readonly MarkedToken[], start: number): Child[] {
+  const children: Child[] = [];
+  let offset = start;
+  for (const token of tokens) {
+    children.push({ token, offset });
+    offset += breaksIn(token.raw);
+  }
+  return children;
+}
+
+/** A table's header cells are on its line and the cells of row `r` on its line plus 2 plus `r`. */
+function cellsOf(table: Tokens.Table): Child[] {
+  const children: Child[] = [];
+  for (const [index, row] of [table.header, ...table.rows].entries()) {
+    const offset = index === 0 ? 0 : index + 1;
+    for (const cell of row) {
+      for (const child of tiled(markedTokens(cell.tokens), offset)) {
+        children.push(child);
+      }
+    }
+  }
+  return children;
+}
+
+function childrenOf(token: MarkedToken): Child[] {
+  return token.type === 'table' ? cellsOf(token) : tiled(contentOf(token), 0);
+}
+
+/** Puts `children` on `pending`, the first on top, each `offset` lines after `parent`. */
+function pushChildren(
+  pending: LocatedToken[],
+  children: readonly Child[],
+  parent: LocatedToken | undefined,
+): void {
+  for (const { token, offset } of children.toReversed()) {
+    pending.push({ token, line: (parent?.line ?? 0) + offset, parent: parent?.token });
+  }
+}
 
 /**
  * The tokens of `markdown` as GitHub Flavored Markdown, in document order, each with the line where its source
- * starts, since `marked` keeps no positions. One cursor only moves forward: a token is looked for after everything
- * read before it, its earlier siblings and what they hold, and inside its parent's source. One not found as written
- * there, because `marked` took a container's markers out of it, takes the line of the cursor.
+ * starts: a token's line is its parent's line plus the line breaks in the source of the tokens before it, since
+ * `marked` reads a container's content token by token and a container keeps every line break. A table's header cells
+ * are on its line, and the cells of row r on its line plus 2 plus r.
  */
 export function locatedTokens(markdown: string): readonly LocatedToken[] {
   const text = markdown.replace(/\r\n?/g, '\n');
-  const lineStarts = [0, ...Array.from(text.matchAll(/\n/g), (newline) => newline.index + 1)];
-  const lexed = Lexer.lex(text, { gfm: true, pedantic: false });
+  const lexed = markedTokens(Lexer.lex(text, { gfm: true, pedantic: false }));
   const located: LocatedToken[] = [];
-  const frames: Frame[] = [{ tokens: markedTokens(lexed), next: 0, cursor: 0, end: text.length }];
-  for (let frame = frames.at(-1); frame !== undefined; frame = frames.at(-1)) {
-    const token = frame.tokens[frame.next];
-    if (token === undefined) {
-      frames.pop();
-      const parent = frames.at(-1);
-      if (parent !== undefined) {
-        parent.cursor = Math.max(parent.cursor, frame.cursor);
-      }
-      continue;
-    }
-    frame.next += 1;
-    const found = text.indexOf(token.raw, frame.cursor);
-    const foundEnd = found + token.raw.length;
-    const isWithin = found !== -1 && foundEnd <= frame.end;
-    const at = isWithin ? found : frame.cursor;
-    frame.cursor = isWithin ? foundEnd : frame.cursor;
-    located.push({ token, line: lineAt(lineStarts, at) });
-    frames.push({
-      tokens: childrenOf(token),
-      next: 0,
-      cursor: at,
-      end: isWithin ? foundEnd : frame.end,
-    });
+  const pending: LocatedToken[] = [];
+  pushChildren(pending, tiled(lexed, 1), undefined);
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    located.push(next);
+    pushChildren(pending, childrenOf(next.token), next);
   }
   return located;
 }

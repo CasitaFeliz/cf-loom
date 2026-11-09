@@ -1,0 +1,106 @@
+import type { MarkedToken } from 'marked';
+
+/** A generator that draws the same sequence on every run (mulberry32). */
+export function aSeededDraw(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = (state + 0x6d2b79f5) | 0;
+    let mixed = Math.imul(state ^ (state >>> 15), 1 | state);
+    mixed = (mixed + Math.imul(mixed ^ (mixed >>> 7), 61 | mixed)) ^ mixed;
+    return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** A name drawn from `names` with `draw`. */
+export function pickFrom<Name>(draw: () => number, names: readonly Name[]): Name {
+  return names[Math.floor(draw() * names.length)] as Name;
+}
+
+/** Every type of token `marked` produces, so that a test fails to compile when `marked` adds one. */
+export const tokenTypes: Record<MarkedToken['type'], true> = {
+  blockquote: true,
+  br: true,
+  checkbox: true,
+  code: true,
+  codespan: true,
+  def: true,
+  del: true,
+  em: true,
+  escape: true,
+  heading: true,
+  hr: true,
+  html: true,
+  image: true,
+  link: true,
+  list: true,
+  // biome-ignore lint/style/useNamingConvention: marked names this token type list_item
+  list_item: true,
+  paragraph: true,
+  space: true,
+  strong: true,
+  table: true,
+  text: true,
+};
+
+/** What a container puts before each line of what it holds. */
+export type Container = {
+  /** The prefix of its first line. */
+  readonly first: string;
+  /** The prefix of every later line, and of a blank line once its trailing white space is cut. */
+  readonly rest: string;
+  /** A task item holds text first: a block that is no text there is no task. */
+  readonly needsText: boolean;
+  /** Whether the prefix holds a tab, whose width depends on its column. */
+  readonly hasTab: boolean;
+  /** Whether a paragraph's later lines may leave the prefix out: `marked` misreads a list in a quote there. */
+  readonly canBeLazy: boolean;
+};
+
+function aContainer(first: string, rest: string, flags: Partial<Container> = {}): Container {
+  return { first, rest, needsText: false, hasTab: false, canBeLazy: true, ...flags };
+}
+
+/** Every container a Markdown block can sit in, each drawn by the tests of the three readers. */
+export const containers: Record<string, Container> = {
+  'the top level': aContainer('', ''),
+  'a list item': aContainer('- ', '  '),
+  'a task item': aContainer('- [ ] ', '  ', { needsText: true }),
+  'an ordered item': aContainer('1. ', '   '),
+  'a nested list': aContainer('- - ', '    '),
+  'a blockquote': aContainer('> ', '> '),
+  'a nested quote': aContainer('> > ', '> > '),
+  'a list in a quote': aContainer('> - ', '>   ', { canBeLazy: false }),
+  'a quote in a list': aContainer('- > ', '  > '),
+  'a quote with a tab': aContainer('>\t', '>\t', { hasTab: true }),
+  'an item indented with a tab': aContainer('- ', '\t', { hasTab: true }),
+};
+
+/** The lines of one block of Markdown, and whether it is a paragraph, whose later lines may be lazy. */
+export type Block = { readonly lines: readonly string[]; readonly isParagraph: boolean };
+
+/** Blocks laid out in a container: its lines, and the line of them, counted from 1, that each block starts on. */
+export type Placed = { readonly lines: readonly string[]; readonly starts: readonly number[] };
+
+function prefixOf(container: Container, row: number, isLazy: boolean): string {
+  if (row === 0) {
+    return container.first;
+  }
+  return isLazy ? '' : container.rest;
+}
+
+/** The blocks in `container`, a blank line between two of them, a paragraph's later lines lazy now and then. */
+export function placed(blocks: readonly Block[], container: Container, draw: () => number): Placed {
+  const lines: string[] = [];
+  const starts: number[] = [];
+  for (const [index, block] of blocks.entries()) {
+    if (index > 0) {
+      lines.push(container.rest.trimEnd());
+    }
+    starts.push(lines.length + 1);
+    for (const [at, text] of block.lines.entries()) {
+      const isLazy = block.isParagraph && at > 0 && container.canBeLazy && draw() < 0.4;
+      lines.push(`${prefixOf(container, lines.length, isLazy)}${text}`);
+    }
+  }
+  return { lines, starts };
+}
