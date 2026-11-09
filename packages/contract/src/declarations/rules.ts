@@ -54,7 +54,8 @@ export type ListsSomethingRule<Declaration> = [Extract<keyof Declaration, Groupe
     }
   : unknown;
 
-type IntersectionOf<Members> = (
+/** What every member of a union holds at once. */
+export type IntersectionOf<Members> = (
   Members extends unknown
     ? (member: Members) => void
     : never

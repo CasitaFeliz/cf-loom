@@ -351,6 +351,21 @@ describe('a refusal that lists names reads as generate writes it', () => {
     >();
   });
 
+  test('an Endpoint whose path is a union with a path of no :names is refused for each path by its own rule', () => {
+    const declaration = {
+      ...listOrders,
+      path: '/a/:x' as '/a/:x' | '/b',
+      input: { params: z.object({ id: z.uuid() }) },
+    } as const;
+    type Written = Parameters<typeof defineEndpoint<typeof declaration>>[0];
+
+    type Sentences = SentencesOf<Written['input']['params']>;
+
+    expectTypeOf<Sentences>().toEqualTypeOf<
+      "params declares exactly the path's :names: x" | 'A path without :names takes no params'
+    >();
+  });
+
   test('a Guard listed before two Guards it requires is refused by type and by generate, closed by and', () => {
     const tenant = defineGuard(guardOf('tenant'));
     const org = defineGuard(guardOf('org'));
