@@ -10,6 +10,7 @@
     "src",
     "test",
     "cf-loom.config.ts",
+    "../../packages/contract/test/printed.ts",
     "../../packages/messaging/test/aws-arranging.ts",
     "../../packages/messaging/test/aws-connecting.ts",
     "../../packages/messaging/test/aws-reading.ts",

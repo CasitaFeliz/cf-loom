@@ -1,5 +1,6 @@
 import { sqs } from '@cf-loom/messaging/sqs';
-import { afterAll, beforeAll, describe, expect, type MockInstance, test, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { printedBy } from '../../../packages/contract/test/printed.ts';
 import { wakeEach } from '../../../packages/messaging/test/aws-arranging.ts';
 import { motoClientsAt } from '../../../packages/messaging/test/aws-connecting.ts';
 import { queueCountsOf } from '../../../packages/messaging/test/aws-reading.ts';
@@ -25,9 +26,9 @@ let clients: ReturnType<typeof motoClientsAt>[] = [];
 let reader: ReturnType<typeof motoClientsAt>;
 let orders: RunningService | undefined;
 let billing: RunningService | undefined;
-let consoleSpies: MockInstance[] = [];
-/** The lines written with `console.error` and `console.warn` since both Services started; Vitest clears a spy's own record before each test. */
-const linesWritten: unknown[][] = [];
+/** What `console.error` and `console.warn` print since both Services started; Vitest clears a spy's own record before each test, never these lists. */
+let errorsPrinted: readonly string[] = [];
+let warningsPrinted: readonly string[] = [];
 
 beforeAll(async () => {
   const server = await aMotoServer();
@@ -40,13 +41,8 @@ beforeAll(async () => {
   await applyPlanOf(billingDir, reader, brokerPrefix);
   orders = await ordersOver(sqs({ ...ordersConnecting, prefix: brokerPrefix }));
   billing = await billingOver(sqs({ ...billingConnecting, prefix: brokerPrefix }), orders.url);
-  consoleSpies = (['error', 'warn'] as const).map((method) => {
-    const write = console[method];
-    return vi.spyOn(console, method).mockImplementation((...line) => {
-      linesWritten.push([method, ...line]);
-      write(...line);
-    });
-  });
+  errorsPrinted = printedBy('error');
+  warningsPrinted = printedBy('warn');
 });
 
 afterAll(async () => {
@@ -62,9 +58,6 @@ afterAll(async () => {
       connecting.sqs.destroy();
     }
     await moto?.stop();
-    for (const spy of consoleSpies) {
-      spy.mockRestore();
-    }
   }
 });
 
@@ -103,6 +96,6 @@ describe('orders-service and billing-service over SNS/SQS', () => {
     await untilDeleted(ordersCharging);
     await untilDeleted(ordersHandlingCharge);
 
-    expect(linesWritten).toEqual([]);
+    expect({ error: errorsPrinted, warn: warningsPrinted }).toEqual({ error: [], warn: [] });
   });
 });
