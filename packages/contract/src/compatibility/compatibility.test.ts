@@ -15,6 +15,7 @@ import {
   type EndpointSnapshot,
   type EventSnapshot,
   firstPublishChangesOf,
+  type ObjectNode,
   type PublishedApplicationSnapshot,
   type PublishedDefinitionsSnapshot,
   type PublishedServiceSnapshot,
@@ -34,11 +35,11 @@ const standardRejections: ServiceSnapshot['standardRejections'] = {
   notFound: 'NOT_FOUND',
   notImplemented: 'NOT_IMPLEMENTED',
 };
-const emptyObject = { type: 'object', fields: {} } as const;
-const orderIdParam = {
+const emptyObject: ObjectNode = { type: 'object', fields: {} };
+const orderIdParam: ObjectNode = {
   type: 'object',
   fields: { orderId: { required: true, schema: { type: 'string' } } },
-} as const;
+};
 const heading = {
   format: 1,
   kind: 'service',
@@ -64,11 +65,11 @@ function anEndpoint<const Lifecycle extends EndpointLifecycle = { readonly lifec
     guards: [],
     input: {
       params: orderIdParam,
-      query: { type: 'object', fields: {} },
-      headers: { type: 'object', fields: {} },
+      query: emptyObject,
+      headers: emptyObject,
       body: null,
     },
-    success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
+    success: { status: 200, headers: emptyObject, body: null },
     rejections: [],
     ...fields,
     ...(lifecycle ?? { lifecycle: 'active' }),

@@ -78,14 +78,10 @@ const heading = {
   dependencies: {},
 } as const;
 const noDefs: Defs = {};
+const noFields: ObjectNode = { type: 'object', fields: {} };
 const noBodies = {
-  input: {
-    params: null,
-    query: { type: 'object', fields: {} },
-    headers: { type: 'object', fields: {} },
-    body: null,
-  },
-  success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
+  input: { params: null, query: noFields, headers: noFields, body: null },
+  success: { status: 200, headers: noFields, body: null },
 } as const;
 
 function anEndpoint<const Lifecycle extends EndpointLifecycle = { readonly lifecycle: 'active' }>(

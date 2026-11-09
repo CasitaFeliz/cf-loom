@@ -56,57 +56,87 @@ export type EnumNode = Annotations & {
 };
 
 /** A field of an object: whether it must be present is apart from whether it may be null. */
-export type Field = { readonly required: boolean; readonly schema: SchemaNode };
+export interface FieldOf<Child> {
+  readonly required: boolean;
+  readonly schema: Child;
+}
 
-/** An object with named fields; always open, since a Contract declares no strict object. */
-export type ObjectNode = Annotations & {
+/**
+ * An object with named fields; always open, since a Contract declares no strict object. Generic
+ * over what its children are, so the same shape describes a node and the outline of a failed walk.
+ */
+export interface ObjectNodeOf<Child> extends Annotations {
   readonly type: 'object';
-  readonly fields: Readonly<Record<string, Field>>;
-};
+  readonly fields: Readonly<Record<string, FieldOf<Child>>>;
+}
 
 /** An object whose keys are dynamic strings, all with one value schema. */
-export type RecordNode = Annotations & {
+export interface RecordNodeOf<Child> extends Annotations {
   readonly type: 'record';
   readonly key: StringNode;
-  readonly value: SchemaNode;
-};
+  readonly value: Child;
+}
 
 /** A list of items of one schema. */
-export type ArrayNode = Annotations & {
+export interface ArrayNodeOf<Child> extends Annotations {
   readonly type: 'array';
-  readonly items: SchemaNode;
+  readonly items: Child;
   readonly min?: number;
   readonly max?: number;
-};
+}
 
 /** A list whose positions have their own schemas, then any number of `rest`. */
-export type TupleNode = Annotations & {
+export interface TupleNodeOf<Child> extends Annotations {
   readonly type: 'tuple';
-  readonly items: readonly SchemaNode[];
-  readonly rest?: SchemaNode;
-};
+  readonly items: readonly Child[];
+  readonly rest?: Child;
+}
 
 /** A value that matches at least one of the options. */
-export type UnionNode = Annotations & {
+export interface UnionNodeOf<Child> extends Annotations {
   readonly type: 'union';
-  readonly options: readonly SchemaNode[];
-};
+  readonly options: readonly Child[];
+}
 
 /**
  * Objects told apart by one field, keyed by the canonical JSON of its value in each variant; a
  * variant may be a `ref` to an object def.
  */
-export type TaggedNode = Annotations & {
+export interface TaggedNodeOf<Variant> extends Annotations {
   readonly type: 'tagged';
   readonly discriminator: string;
-  readonly variants: Readonly<Record<string, ObjectNode | RefNode>>;
-};
+  readonly variants: Readonly<Record<string, Variant>>;
+}
 
 /** A value that matches every item, for an intersection that is not of open objects. */
-export type AllOfNode = Annotations & {
+export interface AllOfNodeOf<Child> extends Annotations {
   readonly type: 'allOf';
-  readonly items: readonly SchemaNode[];
-};
+  readonly items: readonly Child[];
+}
+
+/** A field of an object as the Snapshot describes it. */
+export type Field = FieldOf<SchemaNode>;
+
+/** An object as the Snapshot describes it. */
+export type ObjectNode = ObjectNodeOf<SchemaNode>;
+
+/** A record as the Snapshot describes it. */
+export type RecordNode = RecordNodeOf<SchemaNode>;
+
+/** An array as the Snapshot describes it. */
+export type ArrayNode = ArrayNodeOf<SchemaNode>;
+
+/** A tuple as the Snapshot describes it. */
+export type TupleNode = TupleNodeOf<SchemaNode>;
+
+/** A union as the Snapshot describes it. */
+export type UnionNode = UnionNodeOf<SchemaNode>;
+
+/** A tagged union as the Snapshot describes it. */
+export type TaggedNode = TaggedNodeOf<ObjectNode | RefNode>;
+
+/** An intersection that is not of open objects, as the Snapshot describes it. */
+export type AllOfNode = AllOfNodeOf<SchemaNode>;
 
 /** Any JSON value. */
 export type JsonNode = Annotations & { readonly type: 'json' };
