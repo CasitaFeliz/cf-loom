@@ -2,16 +2,20 @@ language js
 
 or {
   `$runner($name, $body, $limit)` where {
-    $runner <: r"(?s)(?:test|it|describe|suite|bench)(?:[.(].*)?",
-    $body <: or {
+    $runner <: r"(?s)(?:test|it|describe|suite)(?:[.(].*)?",
+    $body <: not JsObjectExpression(),
+    $limit <: not or {
       JsArrowFunctionExpression(),
       JsFunctionExpression()
     }
   },
   `$runner($name, $options, $body)` where {
-    $runner <: r"(?s)(?:test|it|describe|suite|bench)(?:[.(].*)?",
-    $options <: JsObjectExpression(),
-    $options <: contains `timeout`
+    $runner <: r"(?s)(?:test|it|describe|suite)(?:[.(].*)?",
+    $options <: JsObjectExpression(members=$members),
+    $members <: some or {
+      `timeout: $_`,
+      JsShorthandPropertyObjectMember(name=`timeout`)
+    }
   },
   `$hook($body, $limit)` where {
     $hook <: r"beforeAll|afterAll|beforeEach|afterEach|aroundAll|aroundEach|onTestFailed|onTestFinished"

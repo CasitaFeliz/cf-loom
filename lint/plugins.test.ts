@@ -13,7 +13,7 @@ interface Diagnostic {
   readonly location: { readonly start: { readonly line: number } };
 }
 
-/** Each `C<n>@<line>` the repository's GritQL plugins report for `probe.ts` or the file given. */
+/** Each `C<n>@<line>` the repository's GritQL plugins report for `probe.ts` or the file given, in the order of the lines. */
 function pluginReportsFor(lines: readonly string[], file = 'probe.ts'): string[] {
   const directory = mkdtempSync(join(tmpdir(), 'cf-loom-lint-'));
   try {
@@ -27,6 +27,7 @@ function pluginReportsFor(lines: readonly string[], file = 'probe.ts'): string[]
     const report = JSON.parse(biome.stdout) as { diagnostics: Diagnostic[] };
     return report.diagnostics
       .filter((diagnostic) => diagnostic.category === 'plugin')
+      .sort((first, second) => first.location.start.line - second.location.start.line)
       .map((diagnostic) => {
         const rule = diagnostic.message.slice(0, diagnostic.message.indexOf(':'));
         return `${rule}@${diagnostic.location.start.line}`;
@@ -174,36 +175,48 @@ describe('lint plugins', () => {
   });
 
   it('report a timeout given to a test, a suite or a hook, and vi.setConfig, in a test file, but not other options, a timeout in a body or another file (C30)', () => {
-    const lines = [
-      "import { afterAll, beforeEach, describe, onTestFinished, test, vi } from 'vitest';",
-      "test('first', () => {}, 10_000);",
-      "test('second', { timeout: 5 }, () => {});",
-      "test.concurrent('third', () => {}, limit);",
-      "test.each([1, 2])('fourth', () => {}, 5);",
-      "describe.concurrent('fifth', { timeout: limit }, () => {});",
+    const reported = [
+      "test('number', () => {}, 10_000);",
+      "it('it', () => {}, 5);",
+      "suite('suite', () => {}, 5);",
+      "test('function', function () {}, 5);",
+      "test('body by name', run, 5);",
+      "test.concurrent('modifier', () => {}, limit);",
+      "test.each([1, 2])('each', () => {}, 5);",
+      "test('options', { timeout: 5 }, () => {});",
+      "test('options, shorthand', { timeout }, () => {});",
+      "test('options, body by name', { retry: 2, timeout: 5 }, run);",
+      "describe.concurrent('options, variable', { timeout: limit }, () => {});",
+      'beforeAll(() => {}, 5);',
       'beforeEach(() => {}, 9);',
       'afterAll(run, limit);',
+      'afterEach(() => {}, 5);',
+      'aroundAll(() => {}, 5);',
+      'aroundEach(() => {}, 5);',
+      'onTestFailed(() => {}, 5);',
       'onTestFinished(() => {}, 4);',
       'vi.setConfig({ testTimeout: 1 });',
+    ];
+    const unreported = [
       "test('retried', { retry: 2 }, () => {});",
-      "test('bounded in its body', () => {",
-      '  const timeout = 5;',
-      '  vi.waitFor(check, { interval: timeout });',
-      '});',
+      "test('retried, body by name', { retry: 2 }, run);",
+      "test('retried by a variable', { retry: timeout }, () => {});",
+      "test('meta', { meta: { timeout: 1 } }, () => {});",
+      "test('options by name', options, () => {});",
+      "test('options by name, function', options, function () {});",
+      "test('in its body', () => { const timeout = 5; vi.waitFor(check, { interval: timeout }); });",
+      "signal.addEventListener('abort', () => {}, { once: true });",
       'beforeEach(() => {});',
     ];
+    const lines = [
+      "import { afterAll, afterEach, aroundAll, aroundEach, beforeAll, beforeEach, describe, it, onTestFailed, onTestFinished, suite, test, vi } from 'vitest';",
+      ...reported,
+      ...unreported,
+    ];
 
-    expect(pluginReportsFor(lines, 'probe.test.ts')).toEqual([
-      'C30@2',
-      'C30@3',
-      'C30@4',
-      'C30@5',
-      'C30@6',
-      'C30@7',
-      'C30@8',
-      'C30@9',
-      'C30@10',
-    ]);
+    expect(pluginReportsFor(lines, 'probe.test.ts')).toEqual(
+      reported.map((_, index) => `C30@${index + 2}`),
+    );
     expect(pluginReportsFor(lines, 'probe.fixture.ts')).toEqual([]);
     expect(pluginReportsFor(lines)).toEqual([]);
   });

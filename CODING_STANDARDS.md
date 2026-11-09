@@ -342,7 +342,8 @@ Error subclass that inherits Error's constructor are out of reach), outside a `*
 literal has a `signal` member, outside `wire/held-request.ts` (a variable init or a copied Request is out of reach)
 (C1), and, in a `*.test.ts`, a read of a clock (`performance.now()`, `Date.now()`, `process.hrtime`, `process.cpuUsage`,
 `process.threadCpuUsage`), a timeout given to a test, a suite or a hook, and any `vi.setConfig` (an options object
-passed through a variable is out of reach) (C30).
+passed through a variable or a spread, and a test function under another name, a `test.extend` alias or a renamed
+import, are out of reach) (C30).
 `scripts/check-tsdoc.ts` fails on an exported declaration in a package's `src` with no TSDoc directly above it (C20);
 `pnpm check` and CI run it. `scripts/check-layout.ts` fails on a `src/` that breaks
 [Package layout](ARCHITECTURE.md#package-layout); `pnpm check` and CI run it. `scripts/check-expect-errors.ts`
