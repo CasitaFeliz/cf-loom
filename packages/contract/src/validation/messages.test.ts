@@ -563,10 +563,34 @@ describe('validateRoot: a Message body beside a schema that fails', () => {
     });
   });
 
-  test('a body that is a ref to a def that fails on its own tells the def’s failure alone', () => {
+  test('a body that is a ref to a def that fails on its own and is no object tells both', () => {
     expect(validateMessages([anEvent({ body: treeWith(z.date()) })])).toEqual({
       kind: 'invalid',
-      failures: [dateRefusal(`${eventAt}<|0>`)],
+      failures: [bodyLine, dateRefusal(`${eventAt}<|0>`)],
+    });
+  });
+
+  test('a body that is a ref to a def whose kind is not built tells the def’s failure alone', () => {
+    const tree: z.ZodType = z
+      .object({
+        constructor: z.string(),
+        get next() {
+          return tree.optional();
+        },
+      })
+      .meta({ id: 'tree' });
+
+    const validated = validateMessages([anEvent({ body: tree })]);
+
+    expect(validated.kind === 'invalid' ? validated.failures.map(({ kind }) => kind) : []).toEqual([
+      'not-allowed',
+    ]);
+  });
+
+  test('a body that is a nullable ref to a def that fails on its own tells both', () => {
+    expect(validateMessages([anEvent({ body: treeWith(z.date()).nullable() })])).toEqual({
+      kind: 'invalid',
+      failures: [bodyLine, dateRefusal(`${eventAt}<|0>`)],
     });
   });
 });

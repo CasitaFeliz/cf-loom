@@ -5,7 +5,7 @@ import {
   messageBodySentence,
   messageVersionSentence,
 } from '../declarations/index.ts';
-import { type DefGraph, defGraphOf, inFields, isWhole, type Outline } from '../walker/index.ts';
+import { type DefGraph, defGraphOf, inFields, type Outline } from '../walker/index.ts';
 import {
   type Declarations,
   isWithoutValue,
@@ -75,7 +75,7 @@ export function messageBodyFailures(
   const graph = defGraphOf(judgedDefs);
   const notObjects = located.filter(({ message }) => {
     const body = nodeOf(message, 'body');
-    return body !== undefined && !isObjectOf(body, graph);
+    return body !== undefined && isNoObject(body, graph);
   });
   return notObjects.map((message) =>
     failure(
@@ -87,24 +87,25 @@ export function messageBodyFailures(
 }
 
 /**
- * Whether an outline is an object, a `ref` read through its def and any alias defs; a nullable one
- * is not. One whose kind is not built is no verdict, and a `ref` is judged only through a def the
- * walk built whole.
+ * Whether an outline is known to be no object: nullable, of a kind other than object, or a `ref`
+ * whose def is, read through any alias defs by the same rule. One whose kind is not built is no
+ * verdict, since the fix of what is refused decides it.
  */
-function isObjectOf(node: Outline, graph: DefGraph<Outline>): boolean {
+function isNoObject(node: Outline, graph: DefGraph<Outline>): boolean {
   if (node.type === undefined) {
-    return true;
+    return false;
   }
   if (node.type !== 'ref') {
-    return node.type === 'object' && node.nullable !== true;
+    return node.type !== 'object' || node.nullable === true;
   }
   const resolved = graph.resolved(node);
   if (resolved === undefined) {
-    return false;
+    return true;
   }
   const { def } = resolved;
-  const isObject = !resolved.nullable && def.type === 'object' && def.nullable !== true;
-  return isObject || !isWhole(def);
+  return (
+    def.type !== undefined && (resolved.nullable || def.type !== 'object' || def.nullable === true)
+  );
 }
 
 function versionFailures({ at, message }: LocatedMessage): readonly DeclarationFailure[] {
