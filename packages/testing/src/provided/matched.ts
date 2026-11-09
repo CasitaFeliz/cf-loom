@@ -1,6 +1,7 @@
 import { basePathOf } from '@cf-loom/client/internal';
 import {
   allowedMethodsOf,
+  joinedOf,
   matchOf,
   type TextSource,
   unbrokenLineOf,
@@ -42,7 +43,7 @@ export function matchedOf(faked: FakedProvider, request: Request): Matched {
     case 'none':
       throw mistakeOf({ provider: faked.provider, what: unmatched });
     case 'other-method': {
-      const what = `${unmatched}; that path takes ${match.allowed.join(', ')}`;
+      const what = `${unmatched}; that path takes ${joinedOf(match.allowed, 'or')}`;
       throw mistakeOf({ provider: faked.provider, what });
     }
     case 'matched':
