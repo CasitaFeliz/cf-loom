@@ -140,7 +140,7 @@ describe('the outline of a failed walk', () => {
     expect(outline?.type).toBeUndefined();
   });
 
-  test('a node walked whole is whole, and one that fails on a check of its own is not', () => {
+  test('a node that walked but fails on an example keeps its fields and is not whole', () => {
     const whole = outlineOf(z.object({ id: z.string() }).meta({ examples: [{ id: 1 }] }));
 
     expect(whole).toMatchObject({ type: 'object', fields: { id: { schema: { type: 'string' } } } });
