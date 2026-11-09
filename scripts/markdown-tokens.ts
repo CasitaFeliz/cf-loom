@@ -100,7 +100,8 @@ function pushChildren(
  * The tokens of `markdown` as GitHub Flavored Markdown, in document order, each with the line where its source
  * starts: a token's line is its parent's line plus the line breaks in the source of the tokens before it, since
  * `marked` reads a container's content token by token and a container keeps every line break. A table's header cells
- * are on its line, and the cells of row r on its line plus 2 plus r.
+ * are on its line, and the cells of row r on its line plus 2 plus r. The one exception is a lazy continuation line of
+ * a list in a quote, where `marked` reads the structure otherwise than GitHub does and drops a line break.
  */
 export function locatedTokens(markdown: string): readonly LocatedToken[] {
   const lexed = markedTokens(Lexer.lex(markdown, { gfm: true, pedantic: false }));
