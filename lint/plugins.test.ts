@@ -174,28 +174,47 @@ describe('lint plugins', () => {
     expect(pluginReportsFor(lines)).toEqual([]);
   });
 
-  it('report a spy on the console outside printed.ts, bound or bare, through globalThis or not, but not in printed.ts or on another object (C23)', () => {
-    const lines = [
-      "import { vi } from 'vitest';",
+  it('report a spy on the console outside printed.ts, however it is written, but not in printed.ts or on another object (C23)', () => {
+    const reported = [
       "export const bound = vi.spyOn(console, 'error');",
       "vi.spyOn(console, 'warn').mockImplementation(() => {});",
       "export const global = vi.spyOn(globalThis.console, 'log');",
-      'export const computed = (method: "debug" | "info") => vi.spyOn(console, method);',
+      "export const node = vi.spyOn(global.console, 'log');",
+      "export const computed = vi.spyOn(globalThis['console'], 'info');",
+      "export const computedNode = vi.spyOn(global['console'], 'debug');",
+      'export const named = (method: "debug" | "info") => vi.spyOn(console, method);',
+      "export const getter = vi.spyOn(console, 'error', 'get');",
+      "export const optional = vi?.spyOn(console, 'warn');",
+      "export const parenthesized = vi.spyOn((console), 'error');",
+      "export const cast = vi.spyOn(console as Console, 'error');",
+      "export const satisfied = vi.spyOn(console satisfies Console, 'error');",
+      "export const twice = vi.spyOn(((console as Console)), 'error');",
+    ];
+    const unreported = [
       "export const emitted = vi.spyOn(process, 'emitWarning');",
       "export const written = vi.spyOn(process.stderr, 'write');",
       "export const logger = vi.spyOn(logs, 'error');",
+      "export const other = vi.spyOn(globalThis, 'fetch');",
       "export const quiet = console.error('a line');",
+      "export const vitest = vitest.spyOn(console, 'error');",
+      'const alias = console;',
+      "export const aliased = vi.spyOn(alias, 'error');",
     ];
+    const lines = ["import { vi } from 'vitest';", ...reported, ...unreported];
+    const expected = reported.map((_, index) => `C23@${index + 2}`);
 
-    expect(pluginReportsFor(lines, 'probe.test.ts')).toEqual(['C23@2', 'C23@3', 'C23@4', 'C23@5']);
-    expect(pluginReportsFor(lines)).toEqual(['C23@2', 'C23@3', 'C23@4', 'C23@5']);
-    expect(pluginReportsFor(lines, 'packages/server/test/probe.ts')).toEqual([
-      'C23@2',
-      'C23@3',
-      'C23@4',
-      'C23@5',
-    ]);
+    expect(pluginReportsFor(lines, 'probe.test.ts')).toEqual(expected);
+    expect(pluginReportsFor(lines)).toEqual(expected);
+    expect(pluginReportsFor(lines, 'packages/server/test/probe.ts')).toEqual(expected);
     expect(pluginReportsFor(lines, 'packages/contract/test/printed.ts')).toEqual([]);
+  });
+
+  it('report a spy on the console in a file whose path only resembles printed.ts (C23)', () => {
+    const lines = ["import { vi } from 'vitest';", "vi.spyOn(console, 'error');"];
+
+    expect(pluginReportsFor(lines, 'packages/contract/test/printed.test.ts')).toEqual(['C23@2']);
+    expect(pluginReportsFor(lines, 'packages/server/test/printed.ts')).toEqual(['C23@2']);
+    expect(pluginReportsFor(lines, 'packages/contract/src/printed.ts')).toEqual(['C23@2']);
   });
 
   it('report a timeout given to a test, a suite or a hook, and vi.setConfig, in a test file, but not other options, a timeout in a body or another file (C30)', () => {

@@ -1,10 +1,25 @@
 language js
 
-`vi.spyOn($target, $method)` as $spy where {
-  $target <: or {
+pattern console_object() {
+  or {
     `console`,
-    `globalThis.console`
-  },
+    `globalThis.console`,
+    `global.console`,
+    JsComputedMemberExpression(object=or {
+      `globalThis`,
+      `global`
+    }, member=$name) where { $name <: r"['\"`]console['\"`]" },
+    JsParenthesizedExpression(expression=console_object()),
+    TsAsExpression(expression=console_object()),
+    TsSatisfiesExpression(expression=console_object())
+  }
+}
+
+JsCallExpression(callee=or {
+  `vi.spyOn`,
+  `vi?.spyOn`
+}, arguments=JsCallArguments(args=[$target, ...])) as $spy where {
+  $target <: console_object(),
   $filename <: not r".*/packages/contract/test/printed\.ts",
   register_diagnostic(span=$spy, message="C23: a test reads what the console prints through printedBy, or makes it throw with throwingConsole, from packages/contract/test/printed.ts; it never spies on the console itself.", severity="error")
 }

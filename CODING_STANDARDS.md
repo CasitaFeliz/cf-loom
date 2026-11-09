@@ -348,8 +348,10 @@ are out of reach), and, in a `*.test.ts`, a read of a clock (`performance.now()`
 `process.cpuUsage`, `process.threadCpuUsage`), a timeout given to a test, a suite or a hook, and any `vi.setConfig` (an
 options object passed through a variable or a spread, and a test function under another name, a `test.extend` alias or
 a renamed import, are out of reach; a test given both its options and its body by name is reported, so write one
-inline) (C30), and, in any file but `packages/contract/test/printed.ts`, a `vi.spyOn` of `console` (C23; an aliased
-`console` and a spy made another way, as `console.error = …`, are out of reach).
+inline) (C30), and, in any file but `packages/contract/test/printed.ts`, a `vi.spyOn` or `vi?.spyOn`, with any
+arguments, of `console` (C23; `console` is read as itself, `globalThis.console`, `global.console` or `globalThis['console']`
+or `global['console']`, in parentheses or after `as` or `satisfies`; `vitest.spyOn`, any other name for `vi` or for
+`console`, and a spy made another way, as `console.error = …`, are out of reach).
 `scripts/check-tsdoc.ts` fails on an exported declaration in a package's `src` with no TSDoc directly above it (C20);
 `pnpm check` and CI run it. `scripts/check-layout.ts` fails on a `src/` that breaks
 [Package layout](ARCHITECTURE.md#package-layout); `pnpm check` and CI run it. `scripts/check-expect-errors.ts`
