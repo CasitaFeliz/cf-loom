@@ -1,4 +1,4 @@
-import { follows, kebabCase, ruleOf } from '../declarations/index.ts';
+import { follows, ruleOf, serviceNameGrammar } from '../declarations/index.ts';
 import type { Problem } from '../validation/index.ts';
 import type { Path } from '../walker/index.ts';
 import {
@@ -67,8 +67,8 @@ const durableConsumerName: TextKind<{
 
 const serviceName: TextKind<string> = {
   unprefixed: (_prefix, text) => text,
-  read: (text) => (follows(kebabCase, text) ? text : undefined),
-  reason: `is not a Service name, ${ruleOf(kebabCase)}`,
+  read: (text) => (follows(serviceNameGrammar, text) ? text : undefined),
+  reason: `is not a Service name, ${ruleOf(serviceNameGrammar)}`,
 };
 
 const subject: TextKind<ReadSubject> = {

@@ -1,9 +1,9 @@
 import {
-  elementName,
   follows,
   isMessageVersion,
-  kebabCase,
-  pascalCase,
+  messageNameGrammar,
+  serviceNameGrammar,
+  subscriptionNameGrammar,
 } from '../declarations/index.ts';
 import {
   type DurableConsumed,
@@ -30,7 +30,9 @@ export function unprefixedSubjectOf(prefix: string | null, subject: string): str
 /** The Service whose Stream an unprefixed name is, when `streamNameOf` prints it from a Service name. */
 export function readStreamName(name: string): { readonly service: string } | undefined {
   const service = name;
-  return follows(kebabCase, service) && streamNameOf(service) === name ? { service } : undefined;
+  return follows(serviceNameGrammar, service) && streamNameOf(service) === name
+    ? { service }
+    : undefined;
 }
 
 /** The Service and what it consumes, when `durableNameOf` prints an unprefixed name from names the grammars accept. */
@@ -43,7 +45,7 @@ export function readDurableName(
   }
   const service = name.slice(0, separator);
   const consumed = consumedOf(name.slice(separator + 1));
-  if (consumed === undefined || !follows(kebabCase, service)) {
+  if (consumed === undefined || !follows(serviceNameGrammar, service)) {
     return undefined;
   }
   return durableNameOf(service, consumed) === name ? { service, consumed } : undefined;
@@ -55,12 +57,12 @@ function consumedOf(text: string): DurableConsumed | undefined {
   if (command !== null) {
     const [, name = '', digits = ''] = command;
     const version = Number(digits);
-    return follows(pascalCase, name) && isMessageVersion(version)
+    return follows(messageNameGrammar, name) && isMessageVersion(version)
       ? { kind: 'command', name, version }
       : undefined;
   }
   const name = text.replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
-  return follows(elementName, name) ? { kind: 'subscription', name } : undefined;
+  return follows(subscriptionNameGrammar, name) ? { kind: 'subscription', name } : undefined;
 }
 
 /** The Service and Message Version, when `subjectOf` prints an unprefixed subject from names the grammars accept. */
@@ -73,8 +75,8 @@ export function readSubject(
     more.length > 0 ||
     !isRoutedKind(kind) ||
     !isMessageVersion(number) ||
-    !follows(kebabCase, service) ||
-    !follows(pascalCase, name);
+    !follows(serviceNameGrammar, service) ||
+    !follows(messageNameGrammar, name);
   if (isUnread) {
     return undefined;
   }
