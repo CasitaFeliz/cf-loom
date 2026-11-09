@@ -1,13 +1,8 @@
 import type { MarkedToken, Token, Tokens } from 'marked';
 import { Lexer } from 'marked';
 
-/** A token of a Markdown text with the line where its source starts, and the token that holds it. */
-export type LocatedToken = {
-  readonly token: MarkedToken;
-  readonly line: number;
-  /** The token whose children it is, `undefined` at the top level; a table cell's tokens have the table. */
-  readonly parent: MarkedToken | undefined;
-};
+/** A token of a Markdown text with the line where its source starts. */
+export type LocatedToken = { readonly token: MarkedToken; readonly line: number };
 
 /** A token and the number of lines between the start of what holds it and the start of its own source. */
 type Child = { readonly token: MarkedToken; readonly offset: number };
@@ -88,14 +83,14 @@ function childrenOf(token: MarkedToken): Child[] {
   return token.type === 'table' ? cellsOf(token) : tiled(contentOf(token), 0);
 }
 
-/** Puts `children` on `pending`, the first on top, each `offset` lines after `parent`. */
+/** Puts `children` on `pending`, the first on top, each `offset` lines after `parentLine`. */
 function pushChildren(
   pending: LocatedToken[],
   children: readonly Child[],
-  parent: LocatedToken | undefined,
+  parentLine: number,
 ): void {
   for (const { token, offset } of children.toReversed()) {
-    pending.push({ token, line: (parent?.line ?? 0) + offset, parent: parent?.token });
+    pending.push({ token, line: parentLine + offset });
   }
 }
 
@@ -110,10 +105,10 @@ export function locatedTokens(markdown: string): readonly LocatedToken[] {
   const lexed = markedTokens(Lexer.lex(text, { gfm: true, pedantic: false }));
   const located: LocatedToken[] = [];
   const pending: LocatedToken[] = [];
-  pushChildren(pending, tiled(lexed, 1), undefined);
+  pushChildren(pending, tiled(lexed, 1), 0);
   for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
     located.push(next);
-    pushChildren(pending, childrenOf(next.token), next);
+    pushChildren(pending, childrenOf(next.token), next.line);
   }
   return located;
 }

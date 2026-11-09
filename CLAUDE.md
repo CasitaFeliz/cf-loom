@@ -20,7 +20,7 @@ Organization-agnostic tooling for Service Contracts: HTTP Endpoints and messagin
 - No `docs/` folder: a compatibility rule goes in `COMPATIBILITY.md`, an architecture concern in `ARCHITECTURE.md`.
 - Each rule lives in one document; the others link to it.
 - The documents describe the current design only, never the history of decisions. A changed decision replaces the old text.
-- Use the glossary's terms, spelled as their entries, and never an _Avoid_ word as a name for its entry's own thing; `scripts/check-terms.ts` fails on a multi-word term spelled otherwise in a document's prose, read as GitHub Flavored Markdown with `marked`: code, HTML, link targets and URLs are not prose.
+- Use the glossary's terms, spelled as their entries, and never an _Avoid_ word as a name for its entry's own thing; `scripts/check-terms.ts` fails on a multi-word term spelled otherwise in a document's prose, read as GitHub Flavored Markdown with `marked`: code, HTML and link targets are not prose.
 
 ## Repository
 

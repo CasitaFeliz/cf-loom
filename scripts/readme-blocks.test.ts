@@ -219,6 +219,7 @@ describe('blocksOf over every fence and container', () => {
 
   /** A tilde fence indented by 1 to 3 spaces keeps them in the code `marked` gives, so only a backtick fence is. */
   function anIndent(mark: string, canBeIndented: boolean): number {
+    // TODO(#619): draw an indented tilde fence once marked takes its indentation out
     const indent = canBeIndented ? pickFrom(draw, indents) : 0;
     return mark.startsWith('~') && indent < 4 ? 0 : indent;
   }

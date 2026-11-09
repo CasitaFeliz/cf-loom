@@ -30,11 +30,9 @@ export function multiWordTerms(glossary: string): string[] {
 /** A stretch of prose: text no markup breaks, and the line where it starts. */
 type ProseRun = { text: string; readonly line: number };
 
-/** The text of an inline text token a reader reads, which is not that of an autolink or a bare URL: no `[text](…)` link. */
-function proseTextOf(token: MarkedToken, parent: MarkedToken | undefined): string | undefined {
-  const isInlineText = token.type === 'text' && token.tokens === undefined;
-  const isAddress = parent?.type === 'link' && !parent.raw.startsWith('[');
-  return isInlineText && !isAddress ? token.text : undefined;
+/** The text of an inline text token, which holds no other token. */
+function proseTextOf(token: MarkedToken): string | undefined {
+  return token.type === 'text' && token.tokens === undefined ? token.text : undefined;
 }
 
 /**
@@ -45,8 +43,8 @@ function proseTextOf(token: MarkedToken, parent: MarkedToken | undefined): strin
 function proseRunsOf(markdown: string): ProseRun[] {
   const runs: ProseRun[] = [];
   let isAfterBreak = false;
-  for (const { token, line, parent } of locatedTokens(markdown)) {
-    const text = proseTextOf(token, parent);
+  for (const { token, line } of locatedTokens(markdown)) {
+    const text = proseTextOf(token);
     const previous = runs.at(-1);
     if (text !== undefined && isAfterBreak && previous !== undefined) {
       previous.text += `\n${text}`;
@@ -75,8 +73,8 @@ function lineOf(run: ProseRun, index: number): number {
 
 /**
  * Each use in the prose of `markdown`, read as GitHub Flavored Markdown, of a term or its plural, its words separated
- * by at most one line break, that is spelled otherwise than in `terms`. Code, HTML, link destinations, link titles,
- * definitions, autolinks and bare URLs are not prose.
+ * by at most one line break, that is spelled otherwise than in `terms`. Code, HTML, link destinations, link titles
+ * and definitions are not prose; a URL holds no white space, so none holds a term.
  */
 export function misspelledTerms(markdown: string, terms: readonly string[]): TermMisspelling[] {
   const spelledOut = new Map(terms.map((term) => [term.toLowerCase(), term]));
