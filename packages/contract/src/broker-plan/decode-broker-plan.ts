@@ -26,8 +26,10 @@ const plan = z.strictObject({
 });
 
 /**
- * Reads a value as the `plan` of the document `cf-loom broker-plan --json` prints, refusing any other
- * shape, so the document itself, an errors document or a hand-edited plan never reaches a Broker.
+ * Reads a value as the `plan` of the document `cf-loom broker-plan --json` prints. Each name, subject and Service
+ * name is read back into the names it is built from, which must follow their grammars and print it again unchanged,
+ * and the plan must be the one Service's plan those names print, in its order; any other value is refused at the
+ * first place it differs, so the document itself, an errors document or a hand-edited plan never reaches a Broker.
  */
 export function decodeBrokerPlan(value: unknown): DecodedBrokerPlan {
   const structured = readWith(plan, value, 'the Broker plan');
