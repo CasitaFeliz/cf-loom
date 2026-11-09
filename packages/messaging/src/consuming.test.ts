@@ -1,3 +1,4 @@
+import { inspect } from 'node:util';
 import {
   defineCommand,
   defineEvent,
@@ -11,6 +12,7 @@ import {
 import { fault, handle, readersOf, type WithResources } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
+import { printedBy } from '../../contract/test/printed.ts';
 import { planOf } from '../test/broker-plans.ts';
 import {
   type Broker,
@@ -353,7 +355,7 @@ describe('consume', () => {
   });
 
   test('a stub is not given to the broker, and consume warns naming it', async () => {
-    const warned = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const printed = printedBy('warn');
 
     const { durableConsumers } = await consuming({
       commands: { chargeCardV1: handle.stub(readers.commands.chargeCardV1) },
@@ -364,9 +366,9 @@ describe('consume', () => {
       'orders-service_command_ChargeCard_v2',
       'orders-service_notify-on-settled',
     ]);
-    expect(warned.mock.calls).toEqual([
-      ["ChargeCard@1's Handler is a Stub: consume does not pull its Messages"],
-      ["notifyOnCreated's Handler is a Stub: consume does not pull its Messages"],
+    expect(printed).toEqual([
+      "ChargeCard@1's Handler is a Stub: consume does not pull its Messages",
+      "notifyOnCreated's Handler is a Stub: consume does not pull its Messages",
     ]);
   });
 
@@ -542,7 +544,7 @@ describe('a Message delivered', () => {
   });
 
   test('without onServiceFault, a retryable Fault is one console line with its attempt, and the last attempt says so', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
     const { broker, deliver } = aBroker();
     const { consume } = await messaging(contract, broker);
     await consume(
@@ -560,11 +562,9 @@ describe('a Message delivered', () => {
     await deliver(created, body, { deliveryCount: 2 });
     await deliver(created, body, { deliveryCount: 3, lastAttempt: true });
 
-    expect(logged.mock.calls).toEqual([
-      ['notifyOnCreated orders-service.event.OrderCreated.v1 m-1 f-1 attempt 2: card 503'],
-      [
-        'notifyOnCreated orders-service.event.OrderCreated.v1 m-1 f-1 attempt 3, the last: card 503',
-      ],
+    expect(printed).toEqual([
+      'notifyOnCreated orders-service.event.OrderCreated.v1 m-1 f-1 attempt 2: card 503',
+      'notifyOnCreated orders-service.event.OrderCreated.v1 m-1 f-1 attempt 3, the last: card 503',
     ]);
   });
 
@@ -693,30 +693,26 @@ describe('a Message delivered', () => {
   });
 
   test('without onServiceFault, an ended Message is logged one line per Issue with its subject, broker message id and Fact id, never the value', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
     const { broker, deliver } = aBroker();
     const { consume } = await messaging(contract, broker);
     await consume(handlers, {});
 
     await deliver(created, { orderId: 'secret-value', status: 7 });
 
-    expect(logged.mock.calls).toEqual([
-      [
-        expect.stringMatching(
-          /^notifyOnCreated orders-service\.event\.OrderCreated\.v1 m-1 f-1 attempt 1: body\.orderId invalid_format: /,
-        ),
-      ],
-      [
-        expect.stringMatching(
-          /^notifyOnCreated orders-service\.event\.OrderCreated\.v1 m-1 f-1 attempt 1: body\.status invalid_value: /,
-        ),
-      ],
+    expect(printed).toEqual([
+      expect.stringMatching(
+        /^notifyOnCreated orders-service\.event\.OrderCreated\.v1 m-1 f-1 attempt 1: body\.orderId invalid_format: /,
+      ),
+      expect.stringMatching(
+        /^notifyOnCreated orders-service\.event\.OrderCreated\.v1 m-1 f-1 attempt 1: body\.status invalid_value: /,
+      ),
     ]);
-    expect(logged.mock.calls.flat().join('\n')).not.toContain('secret-value');
+    expect(printed.join('\n')).not.toContain('secret-value');
   });
 
   test('without onServiceFault, a Fault or a throw is logged with its message and cause', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
     const error = new Error('gateway down');
     const refused = fault({
       committed: 'no',
@@ -746,22 +742,14 @@ describe('a Message delivered', () => {
     await deliver(chargeCard, body);
     await deliver(created, body);
 
-    expect(logged.mock.calls).toEqual([
-      [
-        '%s',
-        'ChargeCard@2 orders-service.command.ChargeCard.v2 m-1 f-1 attempt 1: Card refused',
-        error,
-      ],
-      [
-        '%s',
-        'notifyOnCreated orders-service.event.OrderCreated.v1 m-1 f-1 attempt 1: the Handler threw',
-        error,
-      ],
+    expect(printed).toEqual([
+      `ChargeCard@2 orders-service.command.ChargeCard.v2 m-1 f-1 attempt 1: Card refused ${inspect(error)}`,
+      `notifyOnCreated orders-service.event.OrderCreated.v1 m-1 f-1 attempt 1: the Handler threw ${inspect(error)}`,
     ]);
   });
 
   test('an onServiceFault that rejects leaves the delivery pending, receive resolves, and the console gets the onServiceFault threw line with the rejection as cause', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
     const error = new Error('the hook broke');
     const { broker, deliver } = aBroker();
     const { consume } = await messaging(contract, broker, {
@@ -774,12 +762,8 @@ describe('a Message delivered', () => {
     const settlement = await deliver(created, {});
 
     expect(settlement).toBe('pending');
-    expect(logged.mock.calls).toEqual([
-      [
-        '%s',
-        'notifyOnCreated orders-service.event.OrderCreated.v1 m-1 f-1 attempt 1: onServiceFault threw',
-        error,
-      ],
+    expect(printed).toEqual([
+      `notifyOnCreated orders-service.event.OrderCreated.v1 m-1 f-1 attempt 1: onServiceFault threw ${inspect(error)}`,
     ]);
   });
 });

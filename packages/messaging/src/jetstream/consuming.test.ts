@@ -1,6 +1,7 @@
 // biome-ignore-all lint/style/useNamingConvention: nats.js spells its settings in snake case
 
 import { setTimeout as sleep } from 'node:timers/promises';
+import { inspect } from 'node:util';
 import {
   defineCommand,
   defineEvent,
@@ -15,6 +16,7 @@ import { headers, type NatsConnection, type Subscription } from '@nats-io/nats-c
 import { connect } from '@nats-io/transport-node';
 import { afterAll, afterEach, beforeAll, describe, expect, onTestFinished, test, vi } from 'vitest';
 import { z } from 'zod';
+import { printedBy } from '../../../contract/test/printed.ts';
 import { planOf } from '../../test/broker-plans.ts';
 import { withMethods } from '../../test/connections.ts';
 import {
@@ -370,11 +372,9 @@ async function waitUntilPulling(stream: string, durable: string): Promise<void> 
   });
 }
 
-/** Spies on every console method, so a test can say the adapter wrote nothing. */
-function spiesOnConsole() {
-  return (['debug', 'error', 'info', 'log', 'warn'] as const).map((method) => {
-    return vi.spyOn(console, method).mockImplementation(() => undefined);
-  });
+/** What every console method prints, one list each, so a test can say the adapter wrote nothing. */
+function printedByEveryConsoleMethod() {
+  return (['debug', 'error', 'info', 'log', 'warn'] as const).map((method) => printedBy(method));
 }
 
 describe('consuming over jetstream()', () => {
@@ -639,7 +639,7 @@ describe('consuming over jetstream()', () => {
   });
 
   test('a stub’s Durable consumer is not needed: consume looks only for the Durable consumers of the Handlers it pulls', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    printedBy('warn');
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     await arrangePlanOf(server.url, contract, prefix);
@@ -865,7 +865,7 @@ describe('consuming over jetstream()', () => {
       const names = anOrders(prefix);
       await arrangeOrders(prefix);
       const terminated = await terminationsOf();
-      const consoleSpies = spiesOnConsole();
+      const printed = printedByEveryConsoleMethod();
       const received: Received[] = [];
       const orders = await aMessaging(prefix);
       await orders.consume(handlersOf(received), {});
@@ -882,7 +882,7 @@ describe('consuming over jetstream()', () => {
       });
       await vi.waitFor(() => expect(terminated).toEqual([reason]));
       expect(received).toEqual([]);
-      expect(consoleSpies.map((spy) => spy.mock.calls)).toEqual([[], [], [], [], []]);
+      expect(printed).toEqual([[], [], [], [], []]);
     },
   );
 
@@ -1016,7 +1016,7 @@ describe('consuming over jetstream()', () => {
   });
 
   test('a delivery whose onServiceFault throws is logged with the onServiceFault threw line, and redelivered though its Fault would end it', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
     const prefix = aPrefix();
     await arrangeOrders(prefix, { ack_wait: oneSecond });
     const received: Received[] = [];
@@ -1036,10 +1036,8 @@ describe('consuming over jetstream()', () => {
 
     await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 5_000 });
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
-    expect(logged).toHaveBeenCalledWith(
-      '%s',
-      'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1 attempt 1: onServiceFault threw',
-      hook,
+    expect(printed).toContain(
+      `notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1 attempt 1: onServiceFault threw ${inspect(hook)}`,
     );
   });
 
