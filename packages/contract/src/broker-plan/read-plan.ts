@@ -1,5 +1,5 @@
 import { follows, ruleOf, serviceNameGrammar } from '../declarations/index.ts';
-import type { Problem } from '../validation/index.ts';
+import type { Read } from '../validation/index.ts';
 import type { Path } from '../walker/index.ts';
 import {
   type DurableConsumed,
@@ -11,11 +11,6 @@ import {
   unprefixedSubjectOf,
 } from '../wire/index.ts';
 import type { BrokerPlan, BrokerPlanDurableConsumer, BrokerPlanStream } from './broker-plan.ts';
-
-/** A text of the plan read back as `Value`, or the place where it does not read back. */
-export type Reading<Value> =
-  | { readonly kind: 'read'; readonly value: Value }
-  | { readonly kind: 'unread'; readonly problem: Problem };
 
 /** A Message Version a subject of the plan reads back as, with the Service whose subject it is. */
 type ReadSubject = { readonly service: string } & RoutedMessage;
@@ -80,31 +75,31 @@ const subject: TextKind<ReadSubject> = {
 /** Where a text sits in the plan, and the text. */
 type Site = { readonly at: Path; readonly text: string };
 
-function readText<Value>(kind: TextKind<Value>, prefix: string | null, site: Site): Reading<Value> {
+function readText<Value>(kind: TextKind<Value>, prefix: string | null, site: Site): Read<Value> {
   const unprefixed = kind.unprefixed(prefix, site.text);
   if (unprefixed === undefined) {
-    return unread(site.at, `does not carry the prefix ${prefix}`);
+    return refused(site.at, `does not carry the prefix ${prefix}`);
   }
   const value = kind.read(unprefixed);
-  return value === undefined ? unread(site.at, kind.reason) : { kind: 'read', value };
+  return value === undefined ? refused(site.at, kind.reason) : { kind: 'read', value };
 }
 
-function unread(at: Path, reason: string): Reading<never> {
-  return { kind: 'unread', problem: { at, reason } };
+function refused(at: Path, reason: string): Read<never> {
+  return { kind: 'refused', problems: [{ at, reason }] };
 }
 
 /** Every Stream and Durable consumer of the plan with its texts read back, or the first text that does not read back, in document order. */
-export function readPlan(plan: BrokerPlan): Reading<ReadPlan> {
+export function readPlan(plan: BrokerPlan): Read<ReadPlan> {
   const streams = readEntries(plan.streams, (name, stream) =>
     readStream(plan.prefix, name, stream),
   );
-  if (streams.kind === 'unread') {
+  if (streams.kind === 'refused') {
     return streams;
   }
   const durableConsumers = readEntries(plan.durableConsumers, (name, durableConsumer) =>
     readDurableConsumer(plan.prefix, name, durableConsumer),
   );
-  if (durableConsumers.kind === 'unread') {
+  if (durableConsumers.kind === 'refused') {
     return durableConsumers;
   }
   return {
@@ -113,14 +108,14 @@ export function readPlan(plan: BrokerPlan): Reading<ReadPlan> {
   };
 }
 
-function readEntries<Entry, Read>(
+function readEntries<Entry, Item>(
   entries: Readonly<Record<string, Entry>>,
-  read: (name: string, entry: Entry) => Reading<Read>,
-): Reading<readonly Read[]> {
-  const reads: Read[] = [];
+  read: (name: string, entry: Entry) => Read<Item>,
+): Read<readonly Item[]> {
+  const reads: Item[] = [];
   for (const [name, entry] of Object.entries(entries)) {
     const reading = read(name, entry);
-    if (reading.kind === 'unread') {
+    if (reading.kind === 'refused') {
       return reading;
     }
     reads.push(reading.value);
@@ -132,20 +127,20 @@ function readStream(
   prefix: string | null,
   name: string,
   stream: BrokerPlanStream,
-): Reading<ReadStream> {
+): Read<ReadStream> {
   const at: Path = ['streams', name];
   const key = readText(streamName, prefix, { at, text: name });
-  if (key.kind === 'unread') {
+  if (key.kind === 'refused') {
     return key;
   }
   const service = readText(serviceName, prefix, { at: [...at, 'service'], text: stream.service });
-  if (service.kind === 'unread') {
+  if (service.kind === 'refused') {
     return service;
   }
   const subjects: ReadSubject[] = [];
   for (const [index, text] of stream.subjects.entries()) {
     const reading = readText(subject, prefix, { at: [...at, 'subjects', index], text });
-    if (reading.kind === 'unread') {
+    if (reading.kind === 'refused') {
       return reading;
     }
     subjects.push(reading.value);
@@ -157,7 +152,7 @@ function readDurableConsumer(
   prefix: string | null,
   name: string,
   durableConsumer: BrokerPlanDurableConsumer,
-): Reading<ReadDurableConsumer> {
+): Read<ReadDurableConsumer> {
   const at: Path = ['durableConsumers', name];
   const key = readText(durableConsumerName, prefix, { at, text: name });
   const service = readText(serviceName, prefix, {
@@ -172,16 +167,16 @@ function readDurableConsumer(
     at: [...at, 'subject'],
     text: durableConsumer.subject,
   });
-  if (key.kind === 'unread') {
+  if (key.kind === 'refused') {
     return key;
   }
-  if (service.kind === 'unread') {
+  if (service.kind === 'refused') {
     return service;
   }
-  if (stream.kind === 'unread') {
+  if (stream.kind === 'refused') {
     return stream;
   }
-  if (filter.kind === 'unread') {
+  if (filter.kind === 'refused') {
     return filter;
   }
   const { consumed } = key.value;

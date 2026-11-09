@@ -37,8 +37,8 @@ export function decodeBrokerPlan(value: unknown): DecodedBrokerPlan {
     return malformedAt(structured.problems[0]);
   }
   const read = readPlan(structured.value);
-  if (read.kind === 'unread') {
-    return malformedAt(read.problem);
+  if (read.kind === 'refused') {
+    return malformedAt(read.problems[0]);
   }
   const problem = unprintedProblemOf(structured.value, read.value);
   return problem === undefined ? { kind: 'decoded', plan: structured.value } : malformedAt(problem);
