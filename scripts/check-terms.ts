@@ -1,12 +1,9 @@
 import { globSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import type { MarkedToken } from 'marked';
+import { locatedTokens } from './markdown-tokens.ts';
 
-const boldPhrase = /\*\*([^*\n]+)\*\*/g;
 const multiWordTerm = /^[A-Z]\S*( \S+)+$/;
-const fencedBlock = /^([ \t]*)(```|~~~)[\s\S]*?^\1\2.*$/gm;
-const codeSpan = /(?<!`)(`+)(?!`)(?:(?!\n[ \t]*\n)[\s\S])*?(?<!`)\1(?!`)/g;
-const linkDestination = /\]\([^)\n]*\)/g;
-const bareUrl = /https?:\/\/\S+/g;
 const wordBreak = '(?:[ \\t]+|[ \\t]*\\r?\\n[ \\t]*)';
 const root = join(import.meta.dirname, '..');
 
@@ -21,18 +18,44 @@ export type TermMisspelling = {
 
 /** The glossary's terms of two words or more: each bold phrase of CONTEXT.md that starts with a capital letter. */
 export function multiWordTerms(glossary: string): string[] {
-  const phrases = [...glossary.matchAll(boldPhrase)].map(([, phrase = '']) => phrase);
+  const phrases: string[] = [];
+  for (const { token } of locatedTokens(glossary)) {
+    if (token.type === 'strong') {
+      phrases.push(token.text);
+    }
+  }
   return [...new Set(phrases.filter((phrase) => multiWordTerm.test(phrase)))];
 }
 
-/** `markdown` with code, fenced blocks, link destinations and bare URLs replaced by spaces, so every line keeps its number. */
-function proseOf(markdown: string): string {
-  const blankedOut = (match: string): string => match.replace(/[^\n]/g, ' ');
-  let prose = markdown;
-  for (const notProse of [fencedBlock, codeSpan, linkDestination, bareUrl]) {
-    prose = prose.replace(notProse, blankedOut);
+/** A stretch of prose: text no markup breaks, and the line where it starts. */
+type ProseRun = { text: string; readonly line: number };
+
+/** The text of an inline text token a reader reads, which is not that of an autolink or a bare URL: no `[text](…)` link. */
+function proseTextOf(token: MarkedToken, parent: MarkedToken | undefined): string | undefined {
+  const isInlineText = token.type === 'text' && token.tokens === undefined;
+  const isAddress = parent?.type === 'link' && !parent.raw.startsWith('[');
+  return isInlineText && !isAddress ? token.text : undefined;
+}
+
+/**
+ * The prose of `markdown`, one run for the text of each inline text token, joined to the one before it across a hard
+ * line break: code, HTML, definitions, link destinations and link titles hold none, and emphasis, link text and image
+ * text are runs of their own.
+ */
+function proseRunsOf(markdown: string): ProseRun[] {
+  const runs: ProseRun[] = [];
+  let isAfterBreak = false;
+  for (const { token, line, parent } of locatedTokens(markdown)) {
+    const text = proseTextOf(token, parent);
+    const previous = runs.at(-1);
+    if (text !== undefined && isAfterBreak && previous !== undefined) {
+      previous.text += `\n${text}`;
+    } else if (text !== undefined) {
+      runs.push({ text, line });
+    }
+    isAfterBreak = token.type === 'br';
   }
-  return prose;
+  return runs;
 }
 
 function escaped(text: string): string {
@@ -46,27 +69,29 @@ function usesOf(terms: readonly string[]): RegExp {
   return new RegExp(`(?<![A-Za-z0-9-])(${spaced.join('|')})(s|es)?(?![A-Za-z0-9-])`, 'gi');
 }
 
-function lineOf(text: string, index: number): number {
-  return text.slice(0, index).split('\n').length;
+function lineOf(run: ProseRun, index: number): number {
+  return run.line + run.text.slice(0, index).split('\n').length - 1;
 }
 
 /**
- * Each use in the prose of `markdown` of a term or its plural, its words separated by at most one line break,
- * that is spelled otherwise than in `terms`.
+ * Each use in the prose of `markdown`, read as GitHub Flavored Markdown, of a term or its plural, its words separated
+ * by at most one line break, that is spelled otherwise than in `terms`. Code, HTML, link destinations, link titles,
+ * definitions, autolinks and bare URLs are not prose.
  */
 export function misspelledTerms(markdown: string, terms: readonly string[]): TermMisspelling[] {
-  const prose = proseOf(markdown);
   const spelledOut = new Map(terms.map((term) => [term.toLowerCase(), term]));
   const misspellings: TermMisspelling[] = [];
-  for (const { 1: head = '', 2: ending = '', index } of prose.matchAll(usesOf(terms))) {
-    const words = head.replace(/\s+/g, ' ');
-    const term = spelledOut.get(words.toLowerCase());
-    if (term !== undefined && words !== term) {
-      misspellings.push({
-        line: lineOf(prose, index),
-        written: words + ending,
-        spelled: term + ending,
-      });
+  for (const run of proseRunsOf(markdown)) {
+    for (const { 1: head = '', 2: ending = '', index } of run.text.matchAll(usesOf(terms))) {
+      const words = head.replace(/\s+/g, ' ');
+      const term = spelledOut.get(words.toLowerCase());
+      if (term !== undefined && words !== term) {
+        misspellings.push({
+          line: lineOf(run, index),
+          written: words + ending,
+          spelled: term + ending,
+        });
+      }
     }
   }
   return misspellings;
