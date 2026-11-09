@@ -2,9 +2,7 @@ import { Console } from 'node:console';
 import { Writable } from 'node:stream';
 import { describe, expect, test } from 'vitest';
 import { linePool } from './line-pool.ts';
-import { type ConsoleMethod, printedBy, throwingConsole } from './printed.ts';
-
-const methods: readonly ConsoleMethod[] = ['debug', 'error', 'info', 'log', 'warn'];
+import { type ConsoleMethod, consoleMethods, printedBy, throwingConsole } from './printed.ts';
 
 const stderrMethods: readonly ConsoleMethod[] = ['error', 'warn'];
 
@@ -55,9 +53,9 @@ describe('printedBy', () => {
   test("what a console method prints after printedBy is what Node's console writes, call by call, for every line alone", () => {
     const calls = lines.map((line) => [line]);
 
-    const printed = methods.map((method) => printedFor(method, calls));
+    const printed = consoleMethods.map((method) => printedFor(method, calls));
 
-    expect(printed).toEqual(methods.map((method) => writtenFor(method, calls)));
+    expect(printed).toEqual(consoleMethods.map((method) => writtenFor(method, calls)));
   });
 
   test("a line with a cause, an Error, a string, an object or undefined, is printed as Node's console prints it", () => {

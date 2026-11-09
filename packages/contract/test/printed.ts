@@ -1,8 +1,11 @@
 import { format } from 'node:util';
 import { vi } from 'vitest';
 
+/** The console methods a test can silence and read. */
+export const consoleMethods = ['debug', 'error', 'info', 'log', 'warn'] as const;
+
 /** A console method a test silences and reads. */
-export type ConsoleMethod = 'debug' | 'error' | 'info' | 'log' | 'warn';
+export type ConsoleMethod = (typeof consoleMethods)[number];
 
 /**
  * Silences `console[method]` and returns what it prints from then on: for each call, the text Node's

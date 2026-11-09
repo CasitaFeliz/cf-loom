@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { fault } from '@cf-loom/handlers';
 import { afterEach, describe, expect, onTestFinished, test, vi } from 'vitest';
-import { printedBy } from '../../../contract/test/printed.ts';
+import { consoleMethods, printedBy } from '../../../contract/test/printed.ts';
 import { aGate } from '../../test/gate.ts';
 import {
   aMessagingOver,
@@ -410,7 +410,7 @@ describe('inProcess() delivering to the Service’s own Handlers', () => {
 
   test('an Event no Subscription takes reaches no Handler and writes nothing to the console', async () => {
     vi.useFakeTimers();
-    const printed = (['log', 'warn', 'error'] as const).map((method) => printedBy(method));
+    const printed = Object.fromEntries(consoleMethods.map((method) => [method, printedBy(method)]));
     const received: Received[] = [];
     const billing = await aMessagingOver(billingContract, inProcess(thirtySeconds));
     await billing.consume(billingHandlersOf(received), {});
@@ -419,7 +419,7 @@ describe('inProcess() delivering to the Service’s own Handlers', () => {
     await vi.advanceTimersByTimeAsync(3_600_000);
 
     expect(received).toEqual([]);
-    expect(printed).toEqual([[], [], []]);
+    expect(printed).toEqual({ debug: [], error: [], info: [], log: [], warn: [] });
   });
 
   test('two Services connected through one inProcess(): an Event the first publishes reaches the second’s Subscription', async () => {

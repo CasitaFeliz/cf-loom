@@ -16,7 +16,7 @@ import { headers, type NatsConnection, type Subscription } from '@nats-io/nats-c
 import { connect } from '@nats-io/transport-node';
 import { afterAll, afterEach, beforeAll, describe, expect, onTestFinished, test, vi } from 'vitest';
 import { z } from 'zod';
-import { printedBy } from '../../../contract/test/printed.ts';
+import { consoleMethods, printedBy } from '../../../contract/test/printed.ts';
 import { planOf } from '../../test/broker-plans.ts';
 import { withMethods } from '../../test/connections.ts';
 import {
@@ -372,9 +372,9 @@ async function waitUntilPulling(stream: string, durable: string): Promise<void> 
   });
 }
 
-/** What every console method prints, one list each, so a test can say the adapter wrote nothing. */
+/** What every console method prints, keyed by method, so a test can say the adapter wrote nothing. */
 function printedByEveryConsoleMethod() {
-  return (['debug', 'error', 'info', 'log', 'warn'] as const).map((method) => printedBy(method));
+  return Object.fromEntries(consoleMethods.map((method) => [method, printedBy(method)]));
 }
 
 describe('consuming over jetstream()', () => {
@@ -882,7 +882,7 @@ describe('consuming over jetstream()', () => {
       });
       await vi.waitFor(() => expect(terminated).toEqual([reason]));
       expect(received).toEqual([]);
-      expect(printed).toEqual([[], [], [], [], []]);
+      expect(printed).toEqual({ debug: [], error: [], info: [], log: [], warn: [] });
     },
   );
 
