@@ -365,6 +365,20 @@ describe('a refusal that lists names reads as generate writes it', () => {
     expect(messages).toEqual([sentence]);
   });
 
+  test('a Guard listed after one of the two Guards it requires is refused for the other alone', () => {
+    const tenant = defineGuard(guardOf('tenant'));
+    const org = defineGuard(guardOf('org'));
+    const member = defineGuard({ ...guardOf('member'), guards: [tenant, org] });
+    const declaration = { ...listOrders, guards: [tenant, member] } as const;
+    type Written = Parameters<typeof defineEndpoint<typeof declaration>>[0];
+
+    const messages = messagesOf(serviceOf(defineEndpoint(declaration as never)));
+
+    const sentence = 'member requires org earlier in guards';
+    expectTypeOf<SentencesOf<NonNullable<Written['guards']>>>().toEqualTypeOf<typeof sentence>();
+    expect(messages).toEqual([sentence]);
+  });
+
   test('a Guard listed before three Guards it requires lists them in the order its guards list them', () => {
     const tenant = defineGuard(guardOf('tenant'));
     const org = defineGuard(guardOf('org'));
