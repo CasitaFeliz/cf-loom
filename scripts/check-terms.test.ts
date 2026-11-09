@@ -494,6 +494,14 @@ const holders: Record<string, { isProse: boolean; lines: (words: string) => read
     isProse: true,
     lines: (words) => [`The ${splitOf(words)[0]}`, `${splitOf(words)[1]} here.`],
   },
+  'prose over a hard line break': {
+    isProse: true,
+    lines: (words) => [`The ${splitOf(words)[0]}  `, `${splitOf(words)[1]} here.`],
+  },
+  'prose over a backslash line break': {
+    isProse: true,
+    lines: (words) => [`The ${splitOf(words)[0]}\\`, `${splitOf(words)[1]} here.`],
+  },
   'a code span': { isProse: false, lines: (words) => [`The \`${words}\` here.`] },
   'a double-backtick span': { isProse: false, lines: (words) => [`The \`\` ${words} \`\` here.`] },
   'a code span over a line break': {
