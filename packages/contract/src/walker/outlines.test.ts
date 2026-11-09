@@ -5,7 +5,8 @@ import { isWhole, walkSchemas } from '../internal/index.ts';
 
 /** The outline a failed walk of one schema kept. */
 function outlineOf(schema: core.$ZodType) {
-  const at = { site: { kind: 'export', name: 'shape' }, declaration: undefined, steps: undefined };
+  const site = { kind: 'export', name: 'shape' } as const;
+  const at = { site, declaration: undefined, steps: undefined };
   const [located] = walkSchemas([{ at, schema }], () => undefined).located;
   if (located?.walked.kind !== 'not-allowed') {
     throw new Error('The schema walked whole.');
