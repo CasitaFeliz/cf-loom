@@ -50,6 +50,8 @@ export type Container = {
   readonly rest: string;
   /** A task item holds text first: a block that is no text there is no task. */
   readonly needsText: boolean;
+  /** Whether a list marker opens it: the spaces that follow the marker set the column its lines are indented to. */
+  readonly hasMarker: boolean;
   /** Whether the prefix holds a tab, whose width depends on its column. */
   readonly hasTab: boolean;
   /** Whether a paragraph's later lines may leave the prefix out: `marked` misreads a list in a quote there. */
@@ -57,22 +59,30 @@ export type Container = {
 };
 
 function aContainer(first: string, rest: string, flags: Partial<Container> = {}): Container {
-  return { first, rest, needsText: false, hasTab: false, canBeLazy: true, ...flags };
+  return {
+    first,
+    rest,
+    needsText: false,
+    hasMarker: false,
+    hasTab: false,
+    canBeLazy: true,
+    ...flags,
+  };
 }
 
 /** Every container a Markdown block can sit in, each drawn by the tests of the three readers. */
 export const containers: Record<string, Container> = {
   'the top level': aContainer('', ''),
-  'a list item': aContainer('- ', '  '),
-  'a task item': aContainer('- [ ] ', '  ', { needsText: true }),
-  'an ordered item': aContainer('1. ', '   '),
-  'a nested list': aContainer('- - ', '    '),
+  'a list item': aContainer('- ', '  ', { hasMarker: true }),
+  'a task item': aContainer('- [ ] ', '  ', { needsText: true, hasMarker: true }),
+  'an ordered item': aContainer('1. ', '   ', { hasMarker: true }),
+  'a nested list': aContainer('- - ', '    ', { hasMarker: true }),
   'a blockquote': aContainer('> ', '> '),
   'a nested quote': aContainer('> > ', '> > '),
-  'a list in a quote': aContainer('> - ', '>   ', { canBeLazy: false }),
+  'a list in a quote': aContainer('> - ', '>   ', { canBeLazy: false, hasMarker: true }),
   'a quote in a list': aContainer('- > ', '  > '),
   'a quote with a tab': aContainer('>\t', '>\t', { hasTab: true }),
-  'an item indented with a tab': aContainer('- ', '\t', { hasTab: true }),
+  'an item indented with a tab': aContainer('- ', '\t', { hasMarker: true, hasTab: true }),
 };
 
 /** The lines of one block of Markdown, and whether it is a paragraph, whose later lines may be lazy. */
