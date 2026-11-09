@@ -9,7 +9,7 @@ import {
   placed,
   tokenTypes,
 } from './markdown-containers.ts';
-import { locatedTokens } from './markdown-tokens.ts';
+import { type LocatedToken, locatedTokens } from './markdown-tokens.ts';
 
 function linesOf(markdown: string, type: MarkedToken['type']): number[] {
   const found = locatedTokens(markdown).filter(({ token }) => token.type === type);
@@ -96,6 +96,26 @@ describe('locatedTokens', () => {
     const withLf = locatedTokens(lines.join('\n'));
 
     expect(withCrlf.map(({ line }) => line)).toEqual(withLf.map(({ line }) => line));
+  });
+
+  it('gives each token the token that holds it, and a table cell the table', () => {
+    const markdown = ['> a *b*', '', '| h |', '| - |', '| c |'].join('\n');
+
+    const parents = locatedTokens(markdown).map(
+      ({ token, parent }) => `${token.type} in ${parent?.type ?? 'nothing'}`,
+    );
+
+    expect(parents).toEqual([
+      'blockquote in nothing',
+      'paragraph in blockquote',
+      'text in paragraph',
+      'em in paragraph',
+      'text in em',
+      'space in nothing',
+      'table in nothing',
+      'text in table',
+      'text in table',
+    ]);
   });
 });
 
@@ -191,14 +211,46 @@ function lineOfMarker(token: MarkedToken): number | undefined {
 }
 
 /**
- * Each token not on the line its marker gives, a `space` left out since its line is the one before its gap. A token
- * with no marker in its source (a break, an escape, a closing tag, a rule, a checkbox) is left out: the tokens after
- * it hold markers, and they are on a line only if it was counted right.
+ * The line each token must be on. A token that holds a marker is on its marker's line, less the line breaks before it.
+ * One that holds none (a break, an escape, a closing tag, a rule, a checkbox) is where the token before it ends, or
+ * where its parent starts when it is the first, both taken from their own markers. A table's cells are no sequence, so
+ * a cell's token with no marker has no expected line.
  */
+function expectedLinesOf(located: readonly LocatedToken[]): Map<MarkedToken, number | undefined> {
+  const expected = new Map<MarkedToken, number | undefined>();
+  const last = new Map<MarkedToken | undefined, MarkedToken>();
+  for (const { token, parent } of located) {
+    const before = last.get(parent);
+    const inSequence = parent?.type !== 'table';
+    expected.set(
+      token,
+      lineOfMarker(token) ?? (inSequence ? afterOrIn(before, parent, expected) : undefined),
+    );
+    last.set(parent, token);
+  }
+  return expected;
+}
+
+/** The line where `before` ends, or where `parent` starts when `before` is the first of its parent's tokens. */
+function afterOrIn(
+  before: MarkedToken | undefined,
+  parent: MarkedToken | undefined,
+  expected: Map<MarkedToken, number | undefined>,
+): number | undefined {
+  if (before !== undefined) {
+    const start = expected.get(before);
+    return start === undefined ? undefined : start + breaksIn(before.raw);
+  }
+  return parent === undefined ? 1 : expected.get(parent);
+}
+
+/** Each token not on the line its markers give, a `space` left out since its line is the one before its gap. */
 function wrongLinesOf(markdown: string): string[] {
+  const located = locatedTokens(markdown);
+  const expected = expectedLinesOf(located);
   const wrong: string[] = [];
-  for (const { token, line } of locatedTokens(markdown)) {
-    const want = lineOfMarker(token);
+  for (const { token, line } of located) {
+    const want = expected.get(token);
     if (token.type !== 'space' && want !== undefined && want !== line) {
       wrong.push(`${token.type} ${JSON.stringify(token.raw)} is on line ${line}, not ${want}`);
     }

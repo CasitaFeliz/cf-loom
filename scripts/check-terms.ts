@@ -27,8 +27,8 @@ export function multiWordTerms(glossary: string): string[] {
   return [...new Set(phrases.filter((phrase) => multiWordTerm.test(phrase)))];
 }
 
-/** A stretch of prose: text no markup breaks, and the line where it starts. */
-type ProseRun = { text: string; readonly line: number };
+/** A stretch of prose: text no markup breaks, the line where it starts, and the token that holds it. */
+type ProseRun = { text: string; readonly line: number; readonly parent: MarkedToken | undefined };
 
 /** The text of an inline text token, which holds no other token. */
 function proseTextOf(token: MarkedToken): string | undefined {
@@ -36,22 +36,25 @@ function proseTextOf(token: MarkedToken): string | undefined {
 }
 
 /**
- * The prose of `markdown`, one run for the text of each inline text token, joined to the one before it across a hard
- * line break: code, HTML, definitions, link destinations and link titles hold none, and emphasis, link text and image
- * text are runs of their own.
+ * The prose of `markdown`, one run for the text of each inline text token, joined to its sibling before it across a
+ * hard line break: code, HTML, definitions, link destinations and link titles hold none, and emphasis, link text and
+ * image text are runs of their own.
  */
 function proseRunsOf(markdown: string): ProseRun[] {
   const runs: ProseRun[] = [];
-  let isAfterBreak = false;
-  for (const { token, line } of locatedTokens(markdown)) {
+  let previous: ProseRun | undefined;
+  let broken: ProseRun | undefined;
+  for (const { token, line, parent } of locatedTokens(markdown)) {
     const text = proseTextOf(token);
-    const previous = runs.at(-1);
-    if (text !== undefined && isAfterBreak && previous !== undefined) {
-      previous.text += `\n${text}`;
+    if (text !== undefined && broken !== undefined && broken.parent === parent) {
+      broken.text += `\n${text}`;
     } else if (text !== undefined) {
-      runs.push({ text, line });
+      runs.push({ text, line, parent });
     }
-    isAfterBreak = token.type === 'br';
+    const isBreakAfterText =
+      token.type === 'br' && previous !== undefined && previous.parent === parent;
+    broken = isBreakAfterText ? previous : undefined;
+    previous = text === undefined ? undefined : runs.at(-1);
   }
   return runs;
 }

@@ -388,6 +388,27 @@ describe('misspelledTerms', () => {
     },
   );
 
+  it.each([
+    ['a code span before the break', 'the direct `x`\\\ncall'],
+    ['a paragraph boundary before the break', 'Some direct\n\n`x`\\\ncall'],
+    ['a code block before the break', 'a direct\n\n```\nq\n```\n\n`y`  \ncall'],
+    ['emphasis before the break', '*direct*\\\ncall'],
+    ['a link before the break', '[direct](u)  \ncall'],
+  ])(
+    'reports no term across %s, since only sibling text is joined by a hard line break',
+    (_form, markdown) => {
+      const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+      expect(misspellings).toEqual([]);
+    },
+  );
+
+  it('reports a term that a hard line break splits inside emphasis', () => {
+    const misspellings = misspelledTerms('*a direct  \ncall*', ['Direct call']);
+
+    expect(misspellings).toEqual([{ line: 1, written: 'direct call', spelled: 'Direct call' }]);
+  });
+
   it('numbers the lines of a document with CRLF line ends as it does one with LF', () => {
     const lines = ['> One.', '>', '> A direct call', '', '- a direct', '  call'];
 
@@ -488,7 +509,14 @@ function splitOf(words: string): readonly [string, string] {
 }
 
 /** What can hold the words of a term: whether it is prose, so that a wrong spelling in it is reported. */
-const holders: Record<string, { isProse: boolean; lines: (words: string) => readonly string[] }> = {
+type Holder = {
+  readonly isProse: boolean;
+  /** The row of its lines that its words start on. */
+  readonly row?: number;
+  readonly lines: (words: string) => readonly string[];
+};
+
+const holders: Record<string, Holder> = {
   prose: { isProse: true, lines: (words) => [`The ${words} here.`] },
   'prose over a line break': {
     isProse: true,
@@ -497,6 +525,18 @@ const holders: Record<string, { isProse: boolean; lines: (words: string) => read
   'prose over a hard line break': {
     isProse: true,
     lines: (words) => [`The ${splitOf(words)[0]}  `, `${splitOf(words)[1]} here.`],
+  },
+  'a code span before a hard line break': {
+    isProse: false,
+    lines: (words) => [`The ${splitOf(words)[0]} \`x\`\\`, `${splitOf(words)[1]} here.`],
+  },
+  'emphasis before a hard line break': {
+    isProse: false,
+    lines: (words) => [`The *${splitOf(words)[0]}*  `, `${splitOf(words)[1]} here.`],
+  },
+  'a paragraph boundary before a hard line break': {
+    isProse: false,
+    lines: (words) => [`The ${splitOf(words)[0]}`, '', '`x`\\', `${splitOf(words)[1]} here.`],
   },
   'prose over a backslash line break': {
     isProse: true,
@@ -558,17 +598,22 @@ function spellingOf(term: string, spelling: (typeof spellings)[number], draw: Dr
   }
 }
 
-type Use = { readonly block: Block; readonly expected: Omit<TermMisspelling, 'line'> | undefined };
+type Use = {
+  readonly block: Block;
+  readonly row: number;
+  readonly expected: Omit<TermMisspelling, 'line'> | undefined;
+};
 
 function aUse(terms: readonly string[], draw: Draw): Use {
   const term = pickFrom(draw, terms);
   const spelling = pickFrom(draw, spellings);
-  const holder = holders[pickFrom(draw, Object.keys(holders))] as (typeof holders)[string];
+  const holder = holders[pickFrom(draw, Object.keys(holders))] as Holder;
   const written = spellingOf(term, spelling, draw);
   const isWrong = spelling.startsWith('wrong');
   const spelled = spelling === 'wrong plural' ? pluralOf(term) : term;
   const expected = holder.isProse && isWrong ? { written, spelled } : undefined;
-  return { block: { lines: holder.lines(written), isParagraph: holder.isProse }, expected };
+  const block = { lines: holder.lines(written), isParagraph: holder.isProse };
+  return { block, row: holder.row ?? 0, expected };
 }
 
 /** A document of uses of terms in `container`, and the misspellings in its prose, by construction. */
@@ -581,9 +626,9 @@ function aDocument(
   const lead: Block = { lines: ['An introduction.'], isParagraph: true };
   const laidOut = placed([lead, ...uses.map(({ block }) => block)], container, draw);
   const expected: TermMisspelling[] = [];
-  for (const [index, { expected: use }] of uses.entries()) {
+  for (const [index, { row, expected: use }] of uses.entries()) {
     if (use !== undefined) {
-      expected.push({ line: laidOut.starts[index + 1] as number, ...use });
+      expected.push({ line: (laidOut.starts[index + 1] as number) + row, ...use });
     }
   }
   return { markdown: laidOut.lines.join('\n'), expected };
