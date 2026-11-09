@@ -290,6 +290,14 @@ describe('pinnedReadme', () => {
     expect(pinned).toEqual({ kind: 'pinned', text: `[x](${atCommit}/a.md#L10-L20)` });
   });
 
+  it('pins a link whose fragment holds what its path may not: a question mark, a percent-escape and dots', () => {
+    const readme = `[x](${atMain}/a.md#x?y%20z/../w)`;
+
+    const pinned = pinnedReadme(readme, repository, commit);
+
+    expect(pinned).toEqual({ kind: 'pinned', text: `[x](${atCommit}/a.md#x?y%20z/../w)` });
+  });
+
   it.each([
     [
       'a percent-escaped letter in the name',
