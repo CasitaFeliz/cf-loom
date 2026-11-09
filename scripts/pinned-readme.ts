@@ -1,5 +1,5 @@
 import type { MarkedToken } from 'marked';
-import { locatedTokens } from './readme-tokens.ts';
+import { locatedTokens } from './markdown-tokens.ts';
 
 /** `pattern` as a regular expression source that matches it literally. */
 function literally(pattern: string): string {
