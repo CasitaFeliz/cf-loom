@@ -442,19 +442,18 @@ describe('applyBrokerPlan', () => {
   });
 
   test('without a prefix, applyBrokerPlan creates the names and subjects the plan prints, unprefixed', async () => {
+    const alpha = 'unprefixed-orders.event.Alpha.v1';
+    const bravo = 'unprefixed-orders.command.Bravo.v1';
     const plan: BrokerPlan = {
       prefix: null,
       streams: {
-        'unprefixed-orders': {
-          service: 'unprefixed-orders',
-          subjects: ['unprefixed-orders.event.A.v1'],
-        },
+        'unprefixed-orders': { service: 'unprefixed-orders', subjects: [bravo, alpha] },
       },
       durableConsumers: {
-        'unprefixed-orders_command_B_v1': {
+        'unprefixed-orders_command_Bravo_v1': {
           service: 'unprefixed-orders',
           stream: 'unprefixed-orders',
-          subject: 'unprefixed-orders.event.A.v1',
+          subject: bravo,
         },
       },
     };
@@ -466,10 +465,10 @@ describe('applyBrokerPlan', () => {
     const config = await durableConsumerConfigOf(
       server.url,
       'unprefixed-orders',
-      'unprefixed-orders_command_B_v1',
+      'unprefixed-orders_command_Bravo_v1',
     );
-    expect(stream.subjects).toEqual(['unprefixed-orders.event.A.v1']);
-    expect(config.filter_subject).toBe('unprefixed-orders.event.A.v1');
+    expect(stream.subjects).toEqual([bravo, alpha]);
+    expect(config.filter_subject).toBe(bravo);
   });
 
   test('"unlimited" reaches NATS as no limit: max age 0, max deliver -1 and max ack pending -1', async () => {
@@ -753,7 +752,7 @@ describe('what applyBrokerPlan refuses', () => {
     const plan: BrokerPlan = {
       ...billing.plan,
       streams: {
-        [own]: { service: 'billing-service', subjects: [`${prefix}.billing-service.event.X.v1`] },
+        [own]: { service: 'billing-service', subjects: [`${prefix}.billing-service.event.Xa.v1`] },
       },
     };
     const connecting = { connect: aConnect().connect };
@@ -786,14 +785,15 @@ describe('what applyBrokerPlan refuses', () => {
     await applyBrokerPlan({ connect: aConnect().connect }, orders.plan, testLimits);
     const first = `${prefix}_billing-service_first`;
     const second = `${prefix}_billing-service_second`;
+    const absent = `${prefix}_absent-service`;
     const plan: BrokerPlan = {
       prefix,
       streams: {},
       durableConsumers: {
         [first]: {
           service: 'billing-service',
-          stream: `${prefix}_absent`,
-          subject: orders.created,
+          stream: absent,
+          subject: `${prefix}.absent-service.event.OrderCreated.v1`,
         },
         [second]: { service: 'billing-service', stream: orders.stream, subject: orders.created },
       },
@@ -802,9 +802,7 @@ describe('what applyBrokerPlan refuses', () => {
 
     const error = await rejectionOf(applyBrokerPlan(connecting, plan, testLimits));
 
-    expect(error.message).toContain(
-      `The Durable consumer ${first} reads the stream ${prefix}_absent`,
-    );
+    expect(error.message).toContain(`The Durable consumer ${first} reads the stream ${absent}`);
     await expect(durableConsumerInfoOf(server.url, orders.stream, second)).resolves.toBeUndefined();
   });
 
@@ -880,17 +878,20 @@ describe('what applyBrokerPlan refuses', () => {
   test('applyBrokerPlan refuses every setting left unset, naming each stream or Durable consumer and the setting, without calling connect', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
-    const billing = aBilling(prefix);
+    const subscribed = `${prefix}_orders-service_on-created`;
     const plan: BrokerPlan = {
       prefix,
       streams: orders.plan.streams,
-      durableConsumers: { ...orders.plan.durableConsumers, ...billing.plan.durableConsumers },
+      durableConsumers: {
+        ...orders.plan.durableConsumers,
+        [subscribed]: { service: 'orders-service', stream: orders.stream, subject: orders.created },
+      },
     };
     const service = aConnect();
     const connecting = { connect: service.connect };
     const limits: JetStreamBrokerLimits = {
       streamDefaults: { retention: 'limits', replicas: 1, storage: 'file' },
-      durableConsumers: { [billing.durable]: { deliverPolicy: 'all', ackWait: '30s' } },
+      durableConsumers: { [subscribed]: { deliverPolicy: 'all', ackWait: '30s' } },
     };
 
     const error = await rejectionOf(applyBrokerPlan(connecting, plan, limits));
@@ -899,7 +900,7 @@ describe('what applyBrokerPlan refuses', () => {
       [
         `The stream ${orders.stream} has no maxAge and duplicateWindow in limits.streams or limits.streamDefaults`,
         `The Durable consumer ${orders.chargeDurable} has no deliverPolicy, ackWait, maxDeliver and maxAckPending in limits.durableConsumers or limits.durableConsumerDefaults`,
-        `The Durable consumer ${billing.durable} has no maxDeliver and maxAckPending in limits.durableConsumers or limits.durableConsumerDefaults`,
+        `The Durable consumer ${subscribed} has no maxDeliver and maxAckPending in limits.durableConsumers or limits.durableConsumerDefaults`,
       ].join('\n'),
     );
     expect(service.opened).toHaveLength(0);
@@ -1216,24 +1217,15 @@ describe('applyBrokerPlan: a refusal whose places hold a line break', () => {
   );
 
   test.for(lineBreaks)(
-    'a plan stream and Durable consumer named with %s and left with no settings are refused on one line each',
+    'a plan whose Stream is named with %s is refused before it connects, on one line, the break written escaped',
     async ([, code, visible]) => {
-      const character = String.fromCharCode(code);
       const prefix = aPrefix();
-      const stream = `${prefix}_orders-service${character}`;
-      const durableConsumer = `${prefix}_charge${character}`;
+      const orders = anOrders(prefix);
+      const stream = `${orders.stream}${String.fromCharCode(code)}`;
       const plan: BrokerPlan = {
         prefix,
-        streams: {
-          [stream]: { service: 'orders-service', subjects: [`${prefix}.orders-service.a`] },
-        },
-        durableConsumers: {
-          [durableConsumer]: {
-            service: 'orders-service',
-            stream,
-            subject: `${prefix}.orders-service.a`,
-          },
-        },
+        streams: { [stream]: { service: 'orders-service', subjects: [orders.created] } },
+        durableConsumers: {},
       };
       const service = aConnect();
       const connecting = { connect: service.connect };
@@ -1241,11 +1233,9 @@ describe('applyBrokerPlan: a refusal whose places hold a line break', () => {
       const error = await rejectionOf(applyBrokerPlan(connecting, plan, readFromJson({})));
 
       expect(error.message.split(lineBreakPattern)).toEqual([
-        expect.stringContaining(`The stream ${prefix}_orders-service${visible} has no retention, `),
-        expect.stringContaining(
-          `The Durable consumer ${prefix}_charge${visible} has no deliverPolicy, `,
-        ),
+        `The value is not the Broker plan of the document cf-loom broker-plan --json prints: streams.${orders.stream}${visible} is not a Stream name: a Service name after the prefix`,
       ]);
+      expect(service.opened).toHaveLength(0);
     },
   );
 });
