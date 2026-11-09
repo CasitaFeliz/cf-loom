@@ -8,6 +8,7 @@ import {
 import { admit, handle, success } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
+import { printedBy } from '../../contract/test/printed.ts';
 import { type ServedFault, serve } from './index.ts';
 
 const unauthenticated = defineRejection({
@@ -72,39 +73,39 @@ function get(path: string): Request {
 }
 
 /** The lines the console gets for the first `count` Issues of 1,000 tags, each too short, after `source`. */
-function firstTagIssues(source: string, part: string, count: number): unknown[][] {
-  return Array.from({ length: count }, (_, index) => [
+function firstTagIssues(source: string, part: string, count: number): unknown[] {
+  return Array.from({ length: count }, (_, index) =>
     expect.stringContaining(`${source}: ${part}.tags.${index} too_small: `),
-  ]);
+  );
 }
 
 describe('serve: the console lists a Fault’s Issues', () => {
   test('a Success of 1,000 invalid items logs its first 100 Issues and one line counting the other 900', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
 
     const response = await serve(contract, handlers, {})(get('/tags'));
 
     expect(response.status).toBe(500);
-    expect(logged.mock.calls).toEqual([
+    expect(printed).toEqual([
       ...firstTagIssues('listTags', 'success.body', 100),
-      ['listTags: 900 more Issues'],
+      'listTags: 900 more Issues',
     ]);
   });
 
   test('a Guard’s Context of 1,000 invalid items logs its first 100 Issues and one line counting the other 900', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
 
     const response = await serve(contract, handlers, {})(get('/guarded-tags'));
 
     expect(response.status).toBe(500);
-    expect(logged.mock.calls).toEqual([
+    expect(printed).toEqual([
       ...firstTagIssues('listGuardedTags tagged', 'context', 100),
-      ['listGuardedTags tagged: 900 more Issues'],
+      'listGuardedTags tagged: 900 more Issues',
     ]);
   });
 
   test('with onServiceFault, the hook receives every Issue and the console nothing', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
     const faults: ServedFault[] = [];
     const onServiceFault = (served: ServedFault) => void faults.push(served);
 
@@ -112,6 +113,6 @@ describe('serve: the console lists a Fault’s Issues', () => {
 
     expect(faults).toMatchObject([{ kind: 'invalid-outcome' }]);
     expect(faults[0]?.kind === 'invalid-outcome' && faults[0].issues).toHaveLength(1_000);
-    expect(logged).not.toHaveBeenCalled();
+    expect(printed).toEqual([]);
   });
 });

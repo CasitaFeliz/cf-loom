@@ -9,6 +9,7 @@ import { fault, handle, type MessageFault, type MessageMeta, readersOf } from '@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
 import { lineBreakPattern, lineBreaks } from '../../../contract/test/line-breaks.ts';
+import { printedBy } from '../../../contract/test/printed.ts';
 import type { ConsumedFault, Messaging, MessagingOptions } from '../index.ts';
 import { type MemoryMessaging, memory } from './index.ts';
 
@@ -193,7 +194,7 @@ describe('settled()', () => {
   test.for(lineBreaks.filter(([name]) => name !== 'LF' && name !== 'CR'))(
     'two Faults of Messages whose Fact ids hold %s make settled() reject with a line each, and the console get a line each, the break written escaped',
     async ([, code, visible]) => {
-      const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const printed = printedBy('error');
       const character = String.fromCharCode(code);
       const { inMemory, sender } = await running(() => ({
         charge: () => fault({ committed: 'no', retryable: true, message: 'card 503' }),
@@ -207,7 +208,7 @@ describe('settled()', () => {
         `ChargeCard@1 orders-service.command.ChargeCard.v1 command.ChargeCard.v1:${id} ${id} attempt 1: card 503`;
       const expected = [lineOf(`a${visible}1`), lineOf(`b${visible}2`)];
       expect(rejection?.message.split(lineBreakPattern)).toEqual(expected);
-      expect(logged.mock.calls.map(([line]) => line)).toEqual(expected);
+      expect(printed).toEqual(expected);
     },
   );
 
