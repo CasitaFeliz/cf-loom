@@ -31,7 +31,23 @@ function routedOf(service: string, read: ReadPlan): RoutedService {
 
 const consumerFields = ['service', 'stream', 'subject'] as const;
 
+const listings = ['streams', 'durableConsumers'] as const;
+
 function differenceOf(plan: BrokerPlan, printed: BrokerPlan, service: string): Problem | undefined {
+  for (const listing of listings) {
+    const extra = Object.keys(plan[listing]).find((name) => !Object.hasOwn(printed[listing], name));
+    if (extra !== undefined) {
+      return { at: [listing, extra], reason: unprinted(service) };
+    }
+  }
+  return consumerDifferenceOf(plan, printed, service);
+}
+
+function consumerDifferenceOf(
+  plan: BrokerPlan,
+  printed: BrokerPlan,
+  service: string,
+): Problem | undefined {
   for (const [name, consumer] of Object.entries(plan.durableConsumers)) {
     const expected = printed.durableConsumers[name];
     const field = consumerFields.find((key) => expected?.[key] !== consumer[key]);

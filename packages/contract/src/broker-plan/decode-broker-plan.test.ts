@@ -474,6 +474,45 @@ describe('reading a broker plan', () => {
     );
   });
 
+  test.each([
+    [
+      'Streams',
+      (plan: EditablePlan): EditablePlan => ({
+        ...plan,
+        streams: {
+          ...plan.streams,
+          'payments-service': {
+            service: 'payments-service',
+            subjects: ['payments-service.event.PaymentSettled.v1'],
+          },
+        },
+      }),
+      'streams.payments-service',
+    ],
+    [
+      'Durable consumers',
+      (plan: EditablePlan): EditablePlan => ({
+        ...plan,
+        durableConsumers: {
+          ...plan.durableConsumers,
+          'payments-service_notify-on-created': {
+            service: 'payments-service',
+            stream: 'orders-service',
+            subject: 'orders-service.event.OrderCreated.v1',
+          },
+        },
+      }),
+      'durableConsumers.payments-service_notify-on-created',
+    ],
+  ])(
+    'a plan that merges the %s of two Services is malformed, naming the first entry of the second',
+    (_, merge, at) => {
+      const decoded = decodeBrokerPlan(merge(aPrintedPlan()));
+
+      expect(decoded).toEqual(malformed(`${at} ${reprinted}`));
+    },
+  );
+
   test('a plan without a prefix asks no name or subject to carry one', () => {
     const plan = {
       prefix: null,
