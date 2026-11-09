@@ -252,10 +252,118 @@ describe('reading a broker plan', () => {
     );
   });
 
+  const notStreamName = 'is not a Stream name: a Service name after the prefix';
+  const notDurableConsumerName =
+    'is not a Durable consumer name: a Service name, then a Subscription name or a Command Version';
+  const notSubject =
+    'is not a subject: a Service name, event or command, a Message name and its version';
+
+  const unreadableStreamNames = [
+    '',
+    'a.b',
+    'Orders',
+    'a b',
+    '*',
+    '>',
+    '-a',
+    'a--b',
+    'a'.repeat(65),
+  ].map((rest) => `staging_${rest}`);
+
+  test.each(unreadableStreamNames)('a Stream named "%s" is malformed, naming it', (name) => {
+    expect(decodeBrokerPlan(aPlanWithStream({}, name))).toEqual(
+      malformed(`streams.${name} ${notStreamName}`),
+    );
+  });
+
+  test.each(unreadableStreamNames)(
+    'a Durable consumer reading the Stream "%s" is malformed, naming it',
+    (stream) => {
+      const decoded = decodeBrokerPlan(aPlanWithDurableConsumer({ stream }));
+
+      expect(decoded).toEqual(
+        malformed(`durableConsumers.${invoiceDurableConsumer}.stream ${notStreamName}`),
+      );
+    },
+  );
+
+  test.each([
+    '',
+    'billing-service',
+    'billing-service_',
+    '_draft-invoice',
+    'Billing_draft-invoice',
+    `${'a'.repeat(65)}_draft-invoice`,
+    'billing-service_Draft',
+    'billing-service_draft-Invoice',
+    'billing-service_draft--invoice',
+    'billing-service_draft-invoice-',
+    'billing-service_draft_invoice',
+    'billing-service_ x>',
+    'billing-service_constructor',
+    `billing-service_${'a'.repeat(65)}`,
+    'billing-service_command_chargeCard_v1',
+    'billing-service_command_ChargeCard_v0',
+    'billing-service_command_ChargeCard_v01',
+    'billing-service_command_ChargeCard_v',
+    'billing-service_command_ChargeCard_1',
+    'billing-service_command_ChargeCard_v9007199254740992',
+  ])('a Durable consumer named "staging_%s" is malformed, naming it', (rest) => {
+    const name = `staging_${rest}`;
+
+    const decoded = decodeBrokerPlan(aPlanWithDurableConsumer({}, name));
+
+    expect(decoded).toEqual(malformed(`durableConsumers.${name} ${notDurableConsumerName}`));
+  });
+
+  const unreadableSubjects = [
+    '',
+    '>',
+    '*.event.*.v1',
+    'orders-service.x',
+    'orders-service.event.>',
+    'orders-service.event.OrderCreated',
+    'orders-service.event.OrderCreated.1',
+    'orders-service.event.OrderCreated.v0',
+    'orders-service.event.OrderCreated.v01',
+    'orders-service.event.OrderCreated.v1e0',
+    'orders-service.event.OrderCreated.v9007199254740992',
+    'orders-service.event.OrderCreated.v1.x',
+    'orders-service.query.OrderCreated.v1',
+    'orders-service.event.orderCreated.v1',
+    'Orders-service.event.OrderCreated.v1',
+    `${'a'.repeat(65)}.event.OrderCreated.v1`,
+  ].map((rest) => `staging.${rest}`);
+
+  test.each(unreadableSubjects)(
+    'a Stream holding the subject "%s" is malformed, naming it',
+    (subject) => {
+      const decoded = decodeBrokerPlan(aPlanWithStream({ subjects: [subject] }));
+
+      expect(decoded).toEqual(malformed(`streams.${ordersStream}.subjects.0 ${notSubject}`));
+    },
+  );
+
+  test.each(unreadableSubjects)(
+    'a Durable consumer filtering on the subject "%s" is malformed, naming it',
+    (subject) => {
+      const decoded = decodeBrokerPlan(aPlanWithDurableConsumer({ subject }));
+
+      expect(decoded).toEqual(
+        malformed(`durableConsumers.${invoiceDurableConsumer}.subject ${notSubject}`),
+      );
+    },
+  );
+
   test('a plan without a prefix asks no name or subject to carry one', () => {
     const plan = {
       prefix: null,
-      streams: { 'orders-service': { service: 'orders-service', subjects: ['orders-service.x'] } },
+      streams: {
+        'orders-service': {
+          service: 'orders-service',
+          subjects: ['orders-service.event.OrderCreated.v1'],
+        },
+      },
       durableConsumers: {},
     };
 

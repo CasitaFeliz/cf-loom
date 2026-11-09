@@ -19,8 +19,6 @@ export {
   factIdHeader,
   isBrokerPrefix,
   isIdHeaderValue,
-  isPrefixedName,
-  isPrefixedSubject,
   maxBrokerHeaderBytes,
   prefixedNameOf,
   prefixedSubjectOf,
@@ -29,7 +27,13 @@ export {
   subjectOf,
   transportHeaderFitOf,
 } from './broker.ts';
-export { readStreamName, unprefixedNameOf } from './broker-names.ts';
+export {
+  readDurableName,
+  readStreamName,
+  readSubject,
+  unprefixedNameOf,
+  unprefixedSubjectOf,
+} from './broker-names.ts';
 export type {
   BrokerNeeds,
   NeededDurableConsumer,
