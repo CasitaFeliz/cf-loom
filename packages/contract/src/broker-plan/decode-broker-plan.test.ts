@@ -92,6 +92,7 @@ function aPrintedPlan(prefix: string | null = null): EditablePlan {
 }
 
 const chargeCardConsumer = 'orders-service_command_ChargeCard_v1';
+const refundConsumer = 'orders-service_command_Refund_v1';
 const refundSubject = 'orders-service.command.Refund.v1';
 
 /** The plan with the fields of one Durable consumer it lists replaced. */
@@ -557,6 +558,18 @@ describe('reading a broker plan', () => {
 
     expect(decoded).toEqual(
       malformed(`durableConsumers.orders-service_notify-on-settled.stream ${reprinted}`),
+    );
+  });
+
+  test('a Stream holding a command’s subject with no Durable consumer for it is malformed, naming the missing name', () => {
+    const { [refundConsumer]: _, ...consumers } = aPrintedPlan().durableConsumers;
+
+    const decoded = decodeBrokerPlan({ ...aPrintedPlan(), durableConsumers: consumers });
+
+    expect(decoded).toEqual(
+      malformed(
+        `durableConsumers lacks ${refundConsumer}, which the plan's names print for orders-service`,
+      ),
     );
   });
 
