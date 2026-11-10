@@ -2,15 +2,20 @@ import { type Failed, failed } from '../child-process/index.ts';
 import { jsonFromNpm, type NpmPlace, type Refused, viewedVersions } from './npm.ts';
 import { type Listing, type Versions, versionsFrom } from './versions.ts';
 
-/** npm's 404 for a package, before anything is known of why the registry lacks it. */
-export type NotFound = { readonly kind: 'not-found' };
+/** npm's 404 for a package, before anything is known of why the registry lacks it: the summary's first line as npm printed it, which names the URL that answered. */
+export type NotFound = { readonly kind: 'not-found'; readonly printed: string };
+
+/** What a message calls the `npm view` of a package's versions. */
+export function viewLabelOf(packageName: string): string {
+  return `npm view ${packageName}`;
+}
 
 /** Reads, through the organization's own npm, every version a package lists. */
 export async function versionsOf(
   npm: NpmPlace,
   packageName: string,
 ): Promise<Versions | NotFound | Failed> {
-  const call = { label: `npm view ${packageName}`, args: ['view', packageName, 'versions'] };
+  const call = { label: viewLabelOf(packageName), args: ['view', packageName, 'versions'] };
   const run = await jsonFromNpm(npm, call, viewedVersions);
   switch (run.kind) {
     case 'json':
@@ -59,5 +64,5 @@ function refusedViewOf(packageName: string, refused: Refused): NotFound | Failed
     const gone = 'its Baseline is gone, so nothing can be checked against it';
     return failed(`${packageName} was unpublished: ${refused.summary}; ${gone}`);
   }
-  return { kind: 'not-found' };
+  return { kind: 'not-found', printed: refused.printed };
 }

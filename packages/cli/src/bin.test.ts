@@ -3667,6 +3667,42 @@ describe.concurrent('cf-loom check', () => {
     });
   });
 
+  test('check of a first version under workspaces=true prints that the package has no Baseline', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, { ...aRoot(), '.npmrc': 'workspaces=true\n' });
+
+    const { ran, registry } = await checkedAgainst(lab, { project, served: {} });
+
+    expect(ran).toEqual({
+      status: 0,
+      stdout: `${neverPublished(registry)}\nWould publish ${ordersPackage}@1.0.0 (first version)\n`,
+      stderr: '',
+    });
+  });
+
+  test.for([
+    'npm_abcdefghijabcdefghijabcdefghijabcdef',
+    'pkg-123e4567-e89b-12d3-a456-426614174000',
+    '123e4567-e89b-12d3-a456-426614174000',
+    'npm_abcdefghijabcdefghijabcdefghijabcdef-tail',
+    '@org/x-npm_abcdefghijabcdefghijabcdefghijabcdef',
+    '@org/a-123e4567-e89b-12d3-a456-426614174000',
+    '@npm_abcdefghijabcdefghijabcdefghijabcdef/x',
+  ])(
+    'a first check of a Definitions Package named %s settles npm’s 404, though npm prints the name redacted',
+    async (name, { lab }) => {
+      const project = await aGeneratedProject(lab, aBuiltDefinitions({ name }));
+      const registry = await lab.aRegistry({});
+      const env = lab.anNpmEnvironment({ userConfig: defaultLoginTo(registry) });
+
+      const ran = await cfLoomWith(project, env, 'check');
+
+      expect(ran).toMatchObject({ status: 0, stderr: '' });
+      expect(ran.stdout).toContain(neverPublished(registry, name));
+    },
+  );
+
   test('with no Baseline, a Message Version numbered after a gap is refused: check prints it and exits 1', async ({
     lab,
   }) => {
@@ -6634,6 +6670,68 @@ describe.concurrent('cf-loom publish', () => {
     },
   );
 
+  test('with workspaces=true in the project’s .npmrc, the first publish of a Definitions Package puts the project’s own files', async ({
+    lab,
+  }) => {
+    const files = {
+      ...aBuiltDefinitions({ workspaces: ['workspaces/*'] }),
+      '.npmrc': 'workspaces=true\n',
+      'workspaces/other/package.json': JSON.stringify({ name: 'other', version: '2.0.0' }),
+      'workspaces/other/index.js': 'export {};\n',
+    };
+    const project = await aGeneratedProject(lab, files);
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(Object.keys(publishedFilesOf(registry)).sort()).toEqual(ownFilesOfDefinitions);
+  });
+
+  test('with NPM_CONFIG_WORKSPACES=true in the environment, a first publish puts the package', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aBuiltDefinitions());
+    const registry = await lab.aRegistry({});
+    const environment = lab.anNpmEnvironment({ userConfig: loginTo(registry) });
+    const env = { ...environment, ...Object.fromEntries([['NPM_CONFIG_WORKSPACES', 'true']]) };
+
+    const ran = await cfLoomWith(project, env, 'publish');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(putsOf(registry)).toEqual([
+      { name: '@org/definitions', version: '1.0.0', distTags: { latest: '1.0.0' } },
+    ]);
+  });
+
+  test.for([
+    ['check', checkedAgainst],
+    ['publish', publishedAgainst],
+  ] as const)(
+    'with workspace=a in the project’s .npmrc, a first %s exits 3 naming the setting npm refuses whoami under',
+    async ([, runner], { lab }) => {
+      const files = {
+        ...aBuiltDefinitions({ workspaces: ['workspaces/*'] }),
+        '.npmrc': 'workspace=a\n',
+        'workspaces/a/package.json': JSON.stringify({ name: 'a', version: '1.0.0' }),
+      };
+      const project = await aGeneratedProject(lab, files);
+
+      const { ran, registry } = await runner(lab, { project, served: {} });
+
+      const refusal = 'npm refuses npm whoami under a workspace setting';
+      const refused = `(ENOWORKSPACES: This command does not support workspaces.)`;
+      const remove =
+        'remove it from the npm configuration the project reads, its .npmrc files or npm_config_workspace in the environment';
+      const looksUnpublished = 'a package your login cannot read looks unpublished';
+      expect(ran).toEqual({
+        status: 3,
+        stdout: '',
+        stderr: `@org/definitions is not in ${registry.url}/, and ${refusal} ${refused}: ${remove}, since without npm's login ${looksUnpublished}\n`,
+      });
+      expect(putRequestsOf(registry)).toEqual([]);
+    },
+  );
+
   test('a Definitions Package declares the CLI’s peers, whichever zod is installed beside it', async ({
     lab,
   }) => {
@@ -6812,6 +6910,54 @@ describe.concurrent('cf-loom publish', () => {
     });
     const distTags = { latest: '1.0.0' };
     expect(putsOf(registry)).toEqual([{ name: '@org/definitions', version: '1.0.0', distTags }]);
+  });
+
+  test.for([
+    ['an object', { 'some-lib@*': { peerDependencies: { react: '*' } } }],
+    ['an empty object', {}],
+  ] as const)(
+    'a Definitions Package’s packageExtensions (%s) is left out of what is published, and the rest of its package.json is kept',
+    async ([, packageExtensions], { lab }) => {
+      const manifest = { packageExtensions, sideEffects: false };
+      const project = await aGeneratedProject(lab, aBuiltDefinitions(manifest));
+
+      const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+      expect(ran).toMatchObject({ status: 0, stderr: '' });
+      expect(putsOf(registry)).toHaveLength(1);
+      const published = JSON.parse(publishedFilesOf(registry)['package.json']!);
+      expect(published).not.toHaveProperty('packageExtensions');
+      expect(published.sideEffects).toBe(false);
+    },
+  );
+
+  test('publish --dry-run of a Definitions Package with packageExtensions prints Would publish, and publish then puts it', async ({
+    lab,
+  }) => {
+    const packageExtensions = { 'some-lib@*': { peerDependencies: { react: '*' } } };
+    const project = await aGeneratedProject(lab, aBuiltDefinitions({ packageExtensions }));
+
+    const dry = await publishedAgainst(lab, { project, served: {} }, '--dry-run');
+    const published = await publishedAgainst(lab, { project, served: {} });
+
+    const would =
+      'Would publish @org/definitions@1.0.0 (first version): --dry-run stopped before npm publish';
+    expect(dry.ran.stdout.split('\n').at(-2)).toBe(would);
+    expect(dry.ran.status).toBe(0);
+    expect(published.ran).toMatchObject({ status: 0, stderr: '' });
+    expect(putsOf(published.registry)).toHaveLength(1);
+  });
+
+  test('the project’s package.json keeps its packageExtensions after publish', async ({ lab }) => {
+    const packageExtensions = { 'some-lib@*': { peerDependencies: { react: '*' } } };
+    const project = await aGeneratedProject(lab, aBuiltDefinitions({ packageExtensions }));
+    const before = read(project, 'package.json');
+
+    const { ran } = await publishedAgainst(lab, { project, served: {} });
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(read(project, 'package.json')).toBe(before);
+    expect(JSON.parse(before).packageExtensions).toEqual(packageExtensions);
   });
 
   test('a Definitions Package publishes under the name its package.json gives, whatever its scope', async ({

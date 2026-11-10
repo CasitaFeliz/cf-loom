@@ -19,7 +19,7 @@ import {
   type RegistryOptions,
   tarballPathOf,
 } from '../../test/fake-registry.ts';
-import { loginTo, token } from '../../test/npm-environment.ts';
+import { defaultLoginTo, loginTo, type PlaceOptions, token } from '../../test/npm-environment.ts';
 import { type Lab, test } from '../../test/npm-lab.ts';
 import { aPublishedSnapshot, orders, ordersPackage } from '../../test/published-snapshot.ts';
 import { aVersion, type ServedVersion } from '../../test/served-version.ts';
@@ -74,7 +74,7 @@ const pathNotPlainAscii = 'has a path that is not printable ASCII, or that holds
 const paxBeyondAscii = 'has a pax header with a byte beyond ASCII';
 const folderNamedSnapshot = 'has a folder named snapshot.json';
 const credentialsInUrl =
-  'npm will not print a registry URL that holds credentials: put them in a //host/:_authToken or //host/:_auth line instead of in the registry URL';
+  'npm redacts a registry URL that holds credentials: put them in a //host/:_authToken or //host/:_auth line instead of in the registry URL';
 
 /** npm strips a path's first folder, so it can be as long as a test needs and still name snapshot.json. */
 const longFirstFolder = 'p'.repeat(1_048_548);
@@ -84,6 +84,58 @@ const paxOfOneMebibytePlusOne = paxRecord('path', `${longFirstFolder}p/snapshot.
 /** The first byte of the "é" is the last of the archive's first 16 KiB, behind this many bytes of filler. */
 const bytesBeforeSplitPax = 13_824;
 const splitPaxPath = paxRecordOfBytes('path', Buffer.from(`package/${'a'.repeat(494)}é.txt`));
+
+/** A place npm runs in, and the environment variables it adds, for a login on one registry. */
+type Arranged = {
+  readonly options: PlaceOptions;
+  readonly env: readonly (readonly [string, string])[];
+};
+
+/** Each source of `workspaces=true` npm reads, as the arrangement of a place that has it. */
+const workspacesSettings: readonly (readonly [string, (login: string) => Arranged])[] = [
+  [
+    'project .npmrc',
+    (login) => ({ options: { projectConfig: 'workspaces=true\n', userConfig: login }, env: [] }),
+  ],
+  [
+    'project .npmrc with include-workspace-root',
+    (login) => ({
+      options: {
+        projectConfig: 'workspaces=true\ninclude-workspace-root=true\n',
+        userConfig: login,
+      },
+      env: [],
+    }),
+  ],
+  ['user config', (login) => ({ options: { userConfig: `${login}workspaces=true\n` }, env: [] })],
+  [
+    'global config',
+    (login) => ({ options: { userConfig: login, globalConfig: 'workspaces=true\n' }, env: [] }),
+  ],
+  [
+    'environment',
+    (login) => ({ options: { userConfig: login }, env: [['npm_config_workspaces', 'true']] }),
+  ],
+];
+
+/** A member of an npm workspaces root, whose `.npmrc` is `rootConfig`, and the `.npmrc` of its own, if any. */
+function aWorkspaceMember(
+  lab: Lab,
+  { rootConfig, memberConfig }: { readonly rootConfig: string; readonly memberConfig?: string },
+) {
+  const root = lab.aPlace({ projectConfig: rootConfig });
+  writeFileSync(
+    join(root.directory, 'package.json'),
+    '{"name":"root","version":"0.0.0","private":true,"workspaces":["workspaces/*"]}',
+  );
+  const directory = join(root.directory, 'workspaces', 'a');
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(join(directory, 'package.json'), '{"name":"a","version":"0.0.0"}');
+  if (memberConfig !== undefined) {
+    writeFileSync(join(directory, '.npmrc'), memberConfig);
+  }
+  return { ...root, directory };
+}
 
 async function readOrders(lab: Lab, served: RegistryOptions) {
   const registry = await lab.aRegistry(served);
@@ -419,15 +471,61 @@ describe.concurrent('baselineOf', () => {
 
     const calls = recording.calls();
     const secrets = [token, registry.host, '--registry'];
-    expect(calls).toHaveLength(6);
+    expect(calls).toHaveLength(5);
     expect(calls.filter((call) => secrets.some((secret) => call.includes(secret)))).toEqual([]);
   });
 
-  test('a package the registry does not know has no Baseline once npm reports a user there', async ({
+  test.for([
+    ['a scoped package', ordersPackage, orders, '', loginTo],
+    ['an unscoped package', 'shared', { kind: 'definitions', name: 'shared' }, '', defaultLoginTo],
+    ['a scoped package at a registry path', ordersPackage, orders, '/proj', loginTo],
+  ] as const)(
+    'a package the registry does not know has no Baseline once npm reports a user on the registry that answered its 404, for %s',
+    async ([, packageName, declared, path, login], { lab }) => {
+      const whoamiPath = `${path}/-/whoami`;
+      const registry = await lab.aRegistry({
+        answers: { [whoamiPath]: jsonAnswer(200, { username: 'tester' }) },
+      });
+      const address = { url: `${registry.url}${path}`, host: `${registry.host}${path}` };
+      const npm = lab.aPlace({ userConfig: login(address) });
+
+      const read = await baselineOf(npm, { packageName, declared, against: undefined });
+
+      expect(read).toEqual({
+        kind: 'read',
+        listing: { packageName, versions: [] },
+        baseline: { kind: 'unknown-package', registry: `${address.url}/`, username: 'tester' },
+      });
+      const whoami = registry.requests.find((request) => request.path === whoamiPath);
+      expect(whoami?.authorization).toBe(`Bearer ${token}`);
+    },
+  );
+
+  test.for(workspacesSettings)(
+    'with workspaces=true in the %s, a package the registry does not know has no Baseline once npm reports a user there',
+    async ([, arranged], { lab }) => {
+      const registry = await lab.aRegistry();
+      const { options, env } = arranged(loginTo(registry));
+      const place = lab.aPlace(options);
+      const npm = { ...place, env: { ...place.env, ...Object.fromEntries(env) } };
+
+      const read = await baselineOf(npm, {
+        packageName: ordersPackage,
+        declared: orders,
+        against: undefined,
+      });
+
+      expect(read).toMatchObject({
+        baseline: { kind: 'unknown-package', registry: `${registry.url}/`, username: 'tester' },
+      });
+    },
+  );
+
+  test('in a workspace member with no .npmrc of its own, the 404 is settled on the root’s registry with the root’s login', async ({
     lab,
   }) => {
     const registry = await lab.aRegistry();
-    const npm = lab.aPlace({ userConfig: loginTo(registry) });
+    const npm = aWorkspaceMember(lab, { rootConfig: loginTo(registry) });
 
     const read = await baselineOf(npm, {
       packageName: ordersPackage,
@@ -435,13 +533,31 @@ describe.concurrent('baselineOf', () => {
       against: undefined,
     });
 
-    expect(read).toEqual({
-      kind: 'read',
-      listing: { packageName: ordersPackage, versions: [] },
+    expect(read).toMatchObject({
       baseline: { kind: 'unknown-package', registry: `${registry.url}/`, username: 'tester' },
     });
-    const whoami = registry.requests.find((request) => request.path === '/-/whoami');
-    expect(whoami?.authorization).toBe(`Bearer ${token}`);
+  });
+
+  test('in a workspace member with its own .npmrc, the 404 is settled on the root’s registry, and the member’s gets no request', async ({
+    lab,
+  }) => {
+    const rootRegistry = await lab.aRegistry();
+    const memberRegistry = await lab.aRegistry();
+    const npm = aWorkspaceMember(lab, {
+      rootConfig: loginTo(rootRegistry),
+      memberConfig: loginTo(memberRegistry),
+    });
+
+    const read = await baselineOf(npm, {
+      packageName: ordersPackage,
+      declared: orders,
+      against: undefined,
+    });
+
+    expect(read).toMatchObject({
+      baseline: { kind: 'unknown-package', registry: `${rootRegistry.url}/`, username: 'tester' },
+    });
+    expect(memberRegistry.requests).toEqual([]);
   });
 
   test('whoami asks the registry npm reads the scope from, not the default registry', async ({
@@ -511,7 +627,7 @@ describe.concurrent('baselineOf', () => {
       against: undefined,
     });
 
-    expect(failureIn(read)).toBe(`npm config get registry failed: ${credentialsInUrl}`);
+    expect(failureIn(read)).toBe(`npm view ${ordersPackage} failed: ${credentialsInUrl}`);
   });
 
   test.for([
@@ -530,7 +646,7 @@ describe.concurrent('baselineOf', () => {
         against: undefined,
       });
 
-      expect(failureIn(read)).toBe(`npm config get ${key} failed: ${credentialsInUrl}`);
+      expect(failureIn(read)).toBe(`npm view ${ordersPackage} failed: ${credentialsInUrl}`);
     },
   );
 
@@ -2027,4 +2143,272 @@ describe('baselineOf and what npm prints', () => {
       expect(failureIn(read)).toContain(`npm has no login there it accepts (npm whoami ${said})`);
     },
   );
+});
+
+/** An npm that answers `view` with the 404 whose summary is given, and `whoami` with a user, writing the registry each `whoami` was pointed at to the log it returns. */
+function aNpmThatRefuses404(lab: Lab, summary: string) {
+  const folder = lab.aFolder();
+  const refusal = join(folder, 'view.json');
+  const log = join(folder, 'whoami.log');
+  writeFileSync(refusal, JSON.stringify({ error: { code: 'E404', summary } }));
+  const body = `case "$1" in\nview) cat '${refusal}'; exit 1;;\nwhoami) echo "$npm_config_registry" >> '${log}'; echo '"tester"';;\nesac`;
+  const place = lab.aPlace({ path: aStubNpm(lab, body) });
+  const asked = () =>
+    existsSync(log) ? readFileSync(log, 'utf8').split('\n').filter(Boolean) : [];
+  return { place, asked };
+}
+
+/** A seeded generator of the same sequence every run, so a failing draw can be replayed. */
+function seededNext(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 2 ** 32;
+  };
+}
+
+/** A name of up to `longest` characters, drawn from `alphabet`. */
+function nameFrom(next: () => number, alphabet: string, longest: number): string {
+  const length = Math.floor(next() * (longest + 1));
+  return Array.from({ length }, () => alphabet[Math.floor(next() * alphabet.length)]).join('');
+}
+
+/** What npm could print for `name`: runs of its characters, drawn at random, each replaced by one mark. */
+function redactedPrintOf(next: () => number, name: string): string {
+  let printed = '';
+  for (let at = 0; at < name.length; ) {
+    const hidden = next() < 0.3 ? 1 + Math.floor(next() * (name.length - at)) : 0;
+    printed += hidden === 0 ? name[at] : '***';
+    at += Math.max(hidden, 1);
+  }
+  return printed;
+}
+
+/** `name` with one character dropped, one added or one changed: a name close to it that is not it. */
+function nearlyNamed(next: () => number, name: string): string {
+  const at = Math.floor(next() * (name.length + 1));
+  const character = nameFrom(next, 'ab', 1) || 'a';
+  const kind = Math.floor(next() * 3);
+  if (kind === 0) {
+    return name.slice(0, at) + name.slice(at + 1);
+  }
+  return kind === 1
+    ? name.slice(0, at) + character + name.slice(at)
+    : name.slice(0, at) + character + name.slice(at + 1);
+}
+
+/** The oracle: a regular expression that reads each mark as one or more characters. */
+function couldHide(printed: string, name: string): boolean {
+  const parts = printed.split('***').map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  return new RegExp(`^${parts.join('.+')}$`, 's').test(name);
+}
+
+describe.concurrent('baselineOf and the 404 npm prints', () => {
+  const scoped = '@org%2fcontract-orders-service';
+
+  test.for([
+    [
+      'a one-word reason phrase',
+      `Gone - GET http://registry.test/${scoped}`,
+      'http://registry.test/',
+    ],
+    [
+      'a reason phrase of several words',
+      `Package Is Not Here - GET http://registry.test/${scoped}`,
+      'http://registry.test/',
+    ],
+    [
+      'a detail that names a second URL with the package’s path',
+      `Not Found - GET http://first.test/${scoped} - GET http://second.test/${scoped}`,
+      'http://first.test/',
+    ],
+    [
+      'a redirect target',
+      `Not Found - GET http://other.test/proj/${scoped} - Not found`,
+      'http://other.test/proj/',
+    ],
+  ] as const)(
+    'a 404 summary with %s is settled on the URL after its first GET',
+    async ([, summary, registry], { lab }) => {
+      const { place, asked } = aNpmThatRefuses404(lab, summary);
+
+      const read = await baselineOf(place, {
+        packageName: ordersPackage,
+        declared: orders,
+        against: undefined,
+      });
+
+      expect(read).toMatchObject({
+        baseline: { kind: 'unknown-package', registry, username: 'tester' },
+      });
+      expect(asked()).toEqual([registry]);
+    },
+  );
+
+  test.for([
+    ['no GET', 'Not Found'],
+    [
+      'a URL whose last segment is another name',
+      'Not Found - GET http://registry.test/@org%2fother',
+    ],
+    [
+      'a URL whose last segment has a malformed % escape',
+      'Not Found - GET http://registry.test/%E0%A4%A',
+    ],
+  ] as const)(
+    'a 404 summary with %s fails, naming no registry, and npm whoami is not asked',
+    async ([, summary], { lab }) => {
+      const { place, asked } = aNpmThatRefuses404(lab, summary);
+
+      const read = await baselineOf(place, {
+        packageName: ordersPackage,
+        declared: orders,
+        against: undefined,
+      });
+
+      expect(failureIn(read)).toBe(`npm view ${ordersPackage}'s 404 names no registry: ${summary}`);
+      expect(asked()).toEqual([]);
+    },
+  );
+
+  test('a 404 summary whose URL holds a redacted UUID fails, naming it, and npm whoami is not asked', async ({
+    lab,
+  }) => {
+    const url = `http://registry.test/***/${scoped}`;
+    const { place, asked } = aNpmThatRefuses404(lab, `Not Found - GET ${url}`);
+
+    const read = await baselineOf(place, {
+      packageName: ordersPackage,
+      declared: orders,
+      against: undefined,
+    });
+
+    const redacted = `npm redacted part of the registry URL (${url})`;
+    expect(failureIn(read)).toBe(
+      `npm view ${ordersPackage} failed: ${redacted}, so cf-loom cannot name the registry to ask npm whoami`,
+    );
+    expect(asked()).toEqual([]);
+  });
+
+  const secret = 'abcdefghijabcdefghijabcdefghijabcdef';
+  const uuid = '123e4567-e89b-12d3-a456-426614174000';
+  const aDefinitions = { kind: 'definitions', name: 'defs' } as const;
+
+  test.for([
+    ['an unscoped token', `npm_${secret}`, 'npm_***'],
+    ['an unscoped name ending in a UUID', `pkg-${uuid}`, 'pkg-***'],
+    ['an unscoped UUID', uuid, '***'],
+    ['an unscoped token followed by more text', `npm_${secret}-tail`, 'npm_***-tail'],
+    ['a scoped name ending in a token', `@org/x-npm_${secret}`, '@org%2fx-npm_***'],
+    ['a scoped name ending in a UUID', `@org/a-${uuid}`, '@org%2fa-***'],
+    ['a scope that is a token', `@npm_${secret}/x`, '@npm_***%2fx'],
+  ] as const)(
+    'a 404 for %s, which npm prints redacted, is settled on the registry that answered',
+    async ([, packageName, printed], { lab }) => {
+      const summary = `Not Found - GET http://registry.test/proj/${printed} - Not found`;
+      const { place, asked } = aNpmThatRefuses404(lab, summary);
+
+      const read = await baselineOf(place, {
+        packageName,
+        declared: aDefinitions,
+        against: undefined,
+      });
+
+      const registry = 'http://registry.test/proj/';
+      expect(read).toMatchObject({
+        baseline: { kind: 'unknown-package', registry, username: 'tester' },
+      });
+      expect(asked()).toEqual([registry]);
+    },
+  );
+
+  test.for([
+    ['a token with nothing before the mark', 'npm_***'],
+    ['another scoped name', '@org%2fother-***'],
+  ] as const)(
+    'a 404 whose last segment is %s, which cannot be npm’s print of the package, names no registry',
+    async ([, printed], { lab }) => {
+      const summary = `Not Found - GET http://registry.test/${printed}`;
+      const { place, asked } = aNpmThatRefuses404(lab, summary);
+
+      const read = await baselineOf(place, {
+        packageName: ordersPackage,
+        declared: orders,
+        against: undefined,
+      });
+
+      expect(failureIn(read)).toBe(`npm view ${ordersPackage}'s 404 names no registry: ${summary}`);
+      expect(asked()).toEqual([]);
+    },
+  );
+
+  test('a 404 whose registry part and package name are both redacted fails naming the registry', async ({
+    lab,
+  }) => {
+    const packageName = `npm_${secret}`;
+    const url = 'http://registry.test/***/npm_***';
+    const { place, asked } = aNpmThatRefuses404(lab, `Not Found - GET ${url}`);
+
+    const read = await baselineOf(place, {
+      packageName,
+      declared: aDefinitions,
+      against: undefined,
+    });
+
+    const redacted = `npm redacted part of the registry URL (${url})`;
+    expect(failureIn(read)).toBe(
+      `npm view ${packageName} failed: ${redacted}, so cf-loom cannot name the registry to ask npm whoami`,
+    );
+    expect(asked()).toEqual([]);
+  });
+
+  test('a 404 whose last segment holds a hundred marks and a character the name lacks names no registry', async ({
+    lab,
+  }) => {
+    const packageName = 'a'.repeat(200);
+    const summary = `Not Found - GET http://registry.test/${'***'.repeat(100)}z`;
+    const { place, asked } = aNpmThatRefuses404(lab, summary);
+
+    const read = await baselineOf(place, {
+      packageName,
+      declared: aDefinitions,
+      against: undefined,
+    });
+
+    expect(failureIn(read)).toBe(`npm view ${packageName}'s 404 names no registry: ${summary}`);
+    expect(asked()).toEqual([]);
+  });
+
+  test('a 404’s last segment is read as a print of the package exactly when each mark can hide one or more characters', async ({
+    lab,
+  }) => {
+    const next = seededNext(635);
+    const registry = 'http://registry.test/';
+    const drawn: { packageName: string; segment: string }[] = [];
+    for (let draw = 0; draw < 240; draw += 1) {
+      const packageName = `a${nameFrom(next, 'ab', 7)}`;
+      const segments = [
+        redactedPrintOf(next, packageName),
+        redactedPrintOf(next, nearlyNamed(next, packageName)),
+        nameFrom(next, 'ab*', 9),
+      ];
+      drawn.push({ packageName, segment: segments[draw % 3] ?? '' });
+    }
+
+    const settled: boolean[] = [];
+    for (const { packageName, segment } of drawn) {
+      const { place } = aNpmThatRefuses404(lab, `Not Found - GET ${registry}${segment}`);
+      const read = await baselineOf(place, {
+        packageName,
+        declared: aDefinitions,
+        against: undefined,
+      });
+      settled.push(read.kind === 'read');
+    }
+
+    const expected = drawn.map(({ packageName, segment }) => couldHide(segment, packageName));
+    expect(expected).toContain(true);
+    expect(expected).toContain(false);
+    expect(settled).toEqual(expected);
+  });
 });

@@ -30,8 +30,9 @@ type Listed = { readonly field: string; readonly name: string; readonly range: s
 /**
  * A Definitions Package's own package.json as published: its version, its peers with `zod` and
  * `@cf-loom/contract` set to the ranges the CLI declares, and `cfLoom`, `snapshot.json`
- * in its `files` and no `publishConfig.tag`; refused when it depends on a range that is no
- * registry range cf-loom keeps, a peer read after those two are set.
+ * in its `files`, and neither `publishConfig.tag` nor `packageExtensions`, which only the project
+ * itself reads; refused when it depends on a range that is no registry range cf-loom keeps, a
+ * peer read after those two are set.
  */
 export function definitionsManifestOf(
   source: Readonly<Record<string, unknown>>,
@@ -39,7 +40,7 @@ export function definitionsManifestOf(
   { peerRanges }: Pick<Packaging, 'peerRanges'>,
 ): DefinitionsManifest {
   const manifest = {
-    ...source,
+    ...withoutPackageExtensionsOf(source),
     version: published.version,
     ...publishConfigWithoutTagOf(source['publishConfig']),
     ...filesWithSnapshotOf(source['files']),
@@ -77,6 +78,14 @@ export function publishedPeersOf(
 
 function unpublishable(line: string): DefinitionsManifest {
   return { kind: 'unpublishable', line };
+}
+
+/** The package.json without `packageExtensions`, which npm 12 honors only at the project's root and refuses to publish. */
+function withoutPackageExtensionsOf(
+  source: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
+  const kept = Object.entries(source).filter(([name]) => name !== 'packageExtensions');
+  return Object.fromEntries(kept);
 }
 
 /** The `publishConfig` field without its `tag`, which npm reads over the dist-tag `publish` chooses; a field that is no map stays as it is. */

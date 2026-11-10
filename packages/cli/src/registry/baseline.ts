@@ -64,15 +64,19 @@ export async function baselineOf(
       return listed;
     case 'not-found':
       return against === undefined
-        ? await baselineOfMissing(npm, packageName)
+        ? await baselineOfMissing(npm, packageName, listed.printed)
         : unlistedAgainstOf(packageName, against);
     case 'versions':
       return await baselineAmong(npm, listed.listing, { declared, against });
   }
 }
 
-async function baselineOfMissing(npm: NpmPlace, packageName: string): Promise<ReadBaseline> {
-  const unknown = await unknownPackageOf(npm, packageName);
+async function baselineOfMissing(
+  npm: NpmPlace,
+  packageName: string,
+  printed: string,
+): Promise<ReadBaseline> {
+  const unknown = await unknownPackageOf(npm, packageName, printed);
   if (unknown.kind === 'failed') {
     return unknown;
   }
