@@ -35,6 +35,16 @@ export type Spawning = {
   readonly notOnPath?: string;
 };
 
+/** How a run ended by its own exit: its exit status and everything it printed. */
+export type Ran = {
+  readonly status: number;
+  readonly stdout: string;
+  readonly stderr: string;
+};
+
+/** What a run is given besides `Spawning`: the text written to its stdin, which is then closed. */
+export type Running = Spawning & { readonly input?: string };
+
 const owners: AsyncDisposableStack[] = [];
 const waiting = new Map<TestProcess, string>();
 
@@ -69,9 +79,17 @@ export function startProcess(
   args: readonly string[],
   spawning: Spawning = {},
 ): TestProcess {
+  return ownedProcess(command, args, spawning);
+}
+
+/** Spawns as `startProcess` does, with stdin ignored, or a pipe that writes `input` and closes when `running` has one. */
+function ownedProcess(command: string, args: readonly string[], running: Running): TestProcess {
   const owner = ownerOf(command);
-  const { cwd, env, notOnPath } = spawning;
-  const child = spawn(command, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const { cwd, env, input, notOnPath } = running;
+  const stdin = input === undefined ? 'ignore' : 'pipe';
+  const child = spawn(command, args, { cwd, env, stdio: [stdin, 'pipe', 'pipe'] });
+  child.stdin?.on('error', () => undefined);
+  child.stdin?.end(input);
   const exited = new Promise<Exit>((resolve, reject) => {
     child.once('close', (status, signal) => resolve({ status, signal }));
     child.once('error', (error: NodeJS.ErrnoException) => {
@@ -128,6 +146,35 @@ export async function untilListening<T>(
   } finally {
     waiting.delete(server);
   }
+}
+
+/**
+ * Runs `command` to its exit, owned as `startProcess`'s processes are, and gives its exit status and all it printed.
+ * It rejects, naming the command line, when a signal ended it, with the end of its stderr, or when it cannot start.
+ * It has no deadline of its own: the test's or hook's timeout bounds it, and the owner then kills it and writes its
+ * stderr to the output.
+ */
+export async function runProcess(
+  command: string,
+  args: readonly string[],
+  running: Running = {},
+): Promise<Ran> {
+  const commandLine = [command, ...args].join(' ');
+  const server = ownedProcess(command, args, running);
+  const stdout = chunksOf(server.child.stdout);
+  const stderr = chunksOf(server.child.stderr);
+  const { status, signal } = await server.exited;
+  if (status === null) {
+    throw new Error(`${commandLine} was ended by ${signal}: ${server.stderr()}`);
+  }
+  return { status, stdout: stdout(), stderr: stderr() };
+}
+
+/** Collects `stream` whole, as text decoded across its chunks. */
+function chunksOf(stream: Readable | null): () => string {
+  const chunks: Buffer[] = [];
+  stream?.on('data', (chunk: Buffer) => chunks.push(chunk));
+  return () => Buffer.concat(chunks).toString('utf8');
 }
 
 /** Sends SIGTERM and settles with how the process exited; a process that ignores it is killed when its owner ends. */

@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import { delimiter, dirname, join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { describe, expect, test } from 'vitest';
-import { aTemporaryDirectory, startProcess, type TestProcess } from './test-process.ts';
+import { aTemporaryDirectory, runProcess, startProcess, type TestProcess } from './test-process.ts';
 
 const fixtures = join(import.meta.dirname, 'test-processes');
 const vitestCli = join(
@@ -188,5 +188,50 @@ describe('a process a test starts through test-process.ts', () => {
     expect(run.output).toContain('no test or hook owns');
     expect(run.pids).toEqual([]);
     expect(run.leftInTemporary).toEqual([]);
+  });
+});
+
+describe('a run a test makes through test-process.ts', () => {
+  test('a run that exits with 0 gives its status and what it printed to stdout and stderr', async () => {
+    const script = "process.stdout.write('printed'); process.stderr.write('warned')";
+
+    const ran = await runProcess(process.execPath, ['-e', script]);
+
+    expect(ran).toEqual({ status: 0, stdout: 'printed', stderr: 'warned' });
+  });
+
+  test('a run that exits with a status other than 0 gives it, for its test to assert', async () => {
+    const ran = await runProcess(process.execPath, ['-e', 'process.exitCode = 3']);
+
+    expect(ran).toEqual({ status: 3, stdout: '', stderr: '' });
+  });
+
+  test('a run gives all it printed beyond the 1 MiB that spawnSync cuts at', async () => {
+    const script = "process.stdout.write('x'.repeat(3 * 1024 * 1024))";
+
+    const ran = await runProcess(process.execPath, ['-e', script]);
+
+    expect(ran.stdout).toBe('x'.repeat(3 * 1024 * 1024));
+  });
+
+  test('a character split across two chunks of output arrives whole', async () => {
+    const script = [
+      "const euro = Buffer.from('€');",
+      'process.stdout.write(euro.subarray(0, 1), () => {',
+      '  setTimeout(() => process.stdout.write(euro.subarray(1)), 50);',
+      '});',
+    ].join('\n');
+
+    const ran = await runProcess(process.execPath, ['-e', script]);
+
+    expect(ran.stdout).toBe('€');
+  });
+
+  test('a run is given the text written to its stdin', async () => {
+    const script = 'process.stdin.pipe(process.stdout)';
+
+    const ran = await runProcess(process.execPath, ['-e', script], { input: 'asked' });
+
+    expect(ran.stdout).toBe('asked');
   });
 });
