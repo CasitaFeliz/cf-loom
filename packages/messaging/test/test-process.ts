@@ -92,6 +92,8 @@ function ownedProcess(command: string, args: readonly string[], running: Running
   const child = spawn(command, args, { cwd, env, stdio: [stdin, 'pipe', 'pipe'] });
   child.stdin?.on('error', () => undefined);
   child.stdin?.end(input);
+  child.stdout?.setEncoding('utf8');
+  child.stderr?.setEncoding('utf8');
   const exited = new Promise<Exit>((resolve, reject) => {
     child.once('close', (status, signal) => resolve({ status, signal }));
     child.once('error', (error: NodeJS.ErrnoException) => {
@@ -107,8 +109,8 @@ function ownedProcess(command: string, args: readonly string[], running: Running
 
 function tailOf(stream: Readable | null): () => string {
   let kept = '';
-  stream?.on('data', (chunk: Buffer) => {
-    kept = (kept + chunk.toString()).slice(-outputKept);
+  stream?.on('data', (chunk: string) => {
+    kept = (kept + chunk).slice(-outputKept);
   });
   return () => kept;
 }
@@ -177,11 +179,11 @@ export async function runProcess(
   }
 }
 
-/** Collects `stream` whole, as text decoded across its chunks. */
+/** Collects `stream`, which decodes its chunks as UTF-8 across their edges, whole. */
 function chunksOf(stream: Readable | null): () => string {
-  const chunks: Buffer[] = [];
-  stream?.on('data', (chunk: Buffer) => chunks.push(chunk));
-  return () => Buffer.concat(chunks).toString('utf8');
+  const chunks: string[] = [];
+  stream?.on('data', (chunk: string) => chunks.push(chunk));
+  return () => chunks.join('');
 }
 
 /** Sends SIGTERM and settles with how the process exited; a process that ignores it is killed when its owner ends. */

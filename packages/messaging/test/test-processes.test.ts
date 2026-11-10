@@ -256,6 +256,23 @@ describe('a run that does not exit by itself, through test-process.ts', () => {
     );
   });
 
+  test('a character split across two chunks of stderr before a signal ends the run reads whole in the rejection', async () => {
+    const script = [
+      "const euro = Buffer.from('€');",
+      'process.stderr.write(euro.subarray(0, 1), () => {',
+      '  setTimeout(() => {',
+      "    process.stderr.write(euro.subarray(1), () => process.kill(process.pid, 'SIGKILL'));",
+      '  }, 50);',
+      '});',
+    ].join('\n');
+
+    const failure = await runProcess(process.execPath, ['-e', script]).catch(
+      (error: unknown) => error,
+    );
+
+    expect(failure).toEqual(new Error(`${process.execPath} -e ${script} was ended by SIGKILL: €`));
+  });
+
   test('a run of a command that is not on PATH rejects with the message the test gave', async () => {
     const notOnPath = 'cf-loom-no-such-command is not on PATH: install it';
 
