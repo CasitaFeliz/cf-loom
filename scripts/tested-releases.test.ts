@@ -46,9 +46,11 @@ type Statements = {
 /** The Node releases the legs of CI name, one for each leg that names one. */
 function nodeReleasesOf(legs: readonly Leg[]): string[] {
   const releases: string[] = [];
-  for (const { matrix } of legs) {
-    if (matrix.node !== undefined) {
-      releases.push(matrix.node);
+  for (const {
+    matrix: { node },
+  } of legs) {
+    if (node !== undefined) {
+      releases.push(node);
     }
   }
   return releases;
@@ -57,9 +59,11 @@ function nodeReleasesOf(legs: readonly Leg[]): string[] {
 /** The npm releases the legs of CI name: the `version` of the `npm` entry of each leg that has one. */
 function npmReleasesOf(legs: readonly Leg[]): string[] {
   const releases: string[] = [];
-  for (const { matrix } of legs) {
-    if (matrix.npm !== undefined) {
-      releases.push((JSON.parse(matrix.npm) as { version: string }).version);
+  for (const {
+    matrix: { npm },
+  } of legs) {
+    if (npm !== undefined) {
+      releases.push((JSON.parse(npm) as { version: string }).version);
     }
   }
   return releases;
@@ -79,7 +83,7 @@ type ToolStatements = {
  */
 function rangeProblems({ tool, releases, declared, documents }: ToolStatements): string[] {
   if (releases.length === 0) {
-    return [`no leg of ci.yml names a ${tool} release`];
+    return [`no leg of ci.yml names a release of ${tool}`];
   }
   const range = promisedRange(tool, releases);
   const problems: string[] = [];
@@ -145,14 +149,15 @@ function typescriptProblems({ workspace, readme }: Statements): string[] {
 function legProblems(legs: readonly Leg[]): string[] {
   const problems: string[] = [];
   for (const { job, matrix } of legs) {
-    if (matrix.node === undefined) {
+    const { node } = matrix;
+    if (node === undefined) {
       problems.push(`a leg of ${job} names no node release: ${JSON.stringify(matrix)}`);
     }
   }
   const releases = [...new Set(nodeReleasesOf(legs))].sort(byRelease);
   for (const [key, group] of legsByClass(legs)) {
     const missing = releases.filter(
-      (release) => !group.some(({ matrix }) => matrix.node === release),
+      (release) => !group.some(({ matrix: { node } }) => node === release),
     );
     if (missing.length > 0) {
       problems.push(`the legs of ${key} do not run on node ${missing.join(', ')}`);
@@ -460,6 +465,6 @@ describe('the npm releases the CLI supports', () => {
 
     const problems = npmProblems(repository);
 
-    expect(problems).toEqual(['no leg of ci.yml names a npm release']);
+    expect(problems).toEqual(['no leg of ci.yml names a release of npm']);
   });
 });

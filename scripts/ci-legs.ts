@@ -133,7 +133,8 @@ export function legsOfCi(workflow: string): Leg[] {
 export function legsByClass(legs: readonly Leg[]): Map<string, Leg[]> {
   const classes = new Map<string, Leg[]>();
   for (const leg of legs) {
-    const key = leg.matrix.memory === undefined ? leg.job : `${leg.job} ${leg.matrix.memory}`;
+    const { memory } = leg.matrix;
+    const key = memory === undefined ? leg.job : `${leg.job} ${memory}`;
     classes.set(key, [...(classes.get(key) ?? []), leg]);
   }
   return classes;
