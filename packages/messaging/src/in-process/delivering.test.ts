@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { fault } from '@cf-loom/handlers';
 import { afterEach, describe, expect, onTestFinished, test, vi } from 'vitest';
+import { consoleMethods, printedBy } from '../../../contract/test/printed.ts';
 import { aGate } from '../../test/gate.ts';
 import {
   aMessagingOver,
@@ -220,7 +221,7 @@ describe('inProcess() delivering to the Service’s own Handlers', () => {
 
   test('without onServiceFault, the console line of the last attempt reads attempt <n>, the last', async () => {
     vi.useFakeTimers();
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
     const orders = await aMessagingOver(ordersContract, inProcess(thirtySeconds));
     const retryable: Behavior = () =>
       fault({ committed: 'no', retryable: true, message: 'card 503' });
@@ -229,8 +230,7 @@ describe('inProcess() delivering to the Service’s own Handlers', () => {
 
     await vi.advanceTimersByTimeAsync(3_600_000);
 
-    const lines = logged.mock.calls.map(([line]) => line);
-    expect(lines).toEqual([
+    expect(printed).toEqual([
       'ChargeCard@1 orders-service.command.ChargeCard.v1 command.ChargeCard.v1:f-1 f-1 attempt 1: card 503',
       'ChargeCard@1 orders-service.command.ChargeCard.v1 command.ChargeCard.v1:f-1 f-1 attempt 2: card 503',
       'ChargeCard@1 orders-service.command.ChargeCard.v1 command.ChargeCard.v1:f-1 f-1 attempt 3, the last: card 503',
@@ -410,9 +410,7 @@ describe('inProcess() delivering to the Service’s own Handlers', () => {
 
   test('an Event no Subscription takes reaches no Handler and writes nothing to the console', async () => {
     vi.useFakeTimers();
-    const consoleCalls = (['log', 'warn', 'error'] as const).map((method) =>
-      vi.spyOn(console, method).mockImplementation(() => undefined),
-    );
+    const printed = Object.fromEntries(consoleMethods.map((method) => [method, printedBy(method)]));
     const received: Received[] = [];
     const billing = await aMessagingOver(billingContract, inProcess(thirtySeconds));
     await billing.consume(billingHandlersOf(received), {});
@@ -421,7 +419,7 @@ describe('inProcess() delivering to the Service’s own Handlers', () => {
     await vi.advanceTimersByTimeAsync(3_600_000);
 
     expect(received).toEqual([]);
-    expect(consoleCalls.map((spy) => spy.mock.calls)).toEqual([[], [], []]);
+    expect(printed).toEqual({ debug: [], error: [], info: [], log: [], warn: [] });
   });
 
   test('two Services connected through one inProcess(): an Event the first publishes reaches the second’s Subscription', async () => {

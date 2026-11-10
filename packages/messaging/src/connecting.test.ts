@@ -1,3 +1,4 @@
+import { inspect } from 'node:util';
 import {
   defineApplication,
   defineCommand,
@@ -9,6 +10,7 @@ import {
 import { handle, readersOf } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
+import { printedBy } from '../../contract/test/printed.ts';
 import {
   type Broker,
   type BrokerTrouble,
@@ -673,7 +675,7 @@ describe('onBrokerTrouble', () => {
   });
 
   test('without onBrokerTrouble, a failing Durable consumer is one console line with its cause, and a recovery another', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
     const { notifying, troubled, close } = await consumingReported();
     const cause = new Error('NATS answered a pull with 503');
 
@@ -681,18 +683,14 @@ describe('onBrokerTrouble', () => {
     troubled({ durableConsumer: notifying, kind: 'recovered' });
     await close();
 
-    expect(logged.mock.calls).toEqual([
-      [
-        '%s',
-        'notifyOnCreated orders-service_notify-on-created orders-service: pulls are failing',
-        cause,
-      ],
-      ['notifyOnCreated orders-service_notify-on-created orders-service: pulls are answered again'],
+    expect(printed).toEqual([
+      `notifyOnCreated orders-service_notify-on-created orders-service: pulls are failing ${inspect(cause)}`,
+      'notifyOnCreated orders-service_notify-on-created orders-service: pulls are answered again',
     ]);
   });
 
   test('an onBrokerTrouble that rejects is logged with its onBrokerTrouble threw line, and the next report still reaches it', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
     const error = new Error('the alerting is down');
     const kinds: string[] = [];
     const { notifying, troubled, close } = await consumingReported({
@@ -707,10 +705,8 @@ describe('onBrokerTrouble', () => {
     await close();
 
     expect(kinds).toEqual(['pull-failed', 'recovered']);
-    expect(logged).toHaveBeenCalledWith(
-      '%s',
-      'notifyOnCreated orders-service_notify-on-created orders-service: onBrokerTrouble threw',
-      error,
+    expect(printed).toContain(
+      `notifyOnCreated orders-service_notify-on-created orders-service: onBrokerTrouble threw ${inspect(error)}`,
     );
   });
 

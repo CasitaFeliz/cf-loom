@@ -5,7 +5,8 @@ import { once } from 'node:events';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { SQSClient } from '@aws-sdk/client-sqs';
 import { fault, handle } from '@cf-loom/handlers';
-import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import { printedBy } from '../../../contract/test/printed.ts';
 import {
   arrangeTopic,
   dropQueue,
@@ -184,7 +185,7 @@ describe('consuming over sqs()', () => {
   });
 
   test('a stub’s Durable consumer needs no queue: consume looks only for the queues of the Handlers it pulls', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    printedBy('warn');
     const { sender, publisher, consume, connecting, orders } = await aMessaging();
     await dropQueue(connecting.sqs, orders.chargeQueue);
     const received: Received[] = [];
@@ -382,7 +383,7 @@ describe('consuming over sqs()', () => {
   });
 
   test('a Message without cf-loom’s attributes is left: one console line per Delivery names the queue and what it lacks, nothing reaches onServiceFault, and after maxReceiveCount receives it is in the dead-letter queue with its body and attributes', async () => {
-    const written = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
     const faults: ConsumedFault[] = [];
     const { consume, connecting, orders } = await aMessaging({
       limits: limitsWith({ ackWait: '1s', maxDeliver: 3 }),
@@ -402,7 +403,7 @@ describe('consuming over sqs()', () => {
         { body: 'not cf-loom’s', attributes: { 'x-other': 'kept' } },
       ]);
     });
-    const lines = written.mock.calls.map(([line]) => String(line)).filter(isLeftLine);
+    const lines = printed.filter(isLeftLine);
     const line = `${orders.notifyQueue}: left SQS message ${id} for the dead-letter queue, since it lacks or cannot read cf-loom-message-id, cf-loom-fact-id and cf-loom-headers`;
     expect(lines).toEqual([line, line, line]);
     expect(received).toEqual([]);
@@ -410,7 +411,7 @@ describe('consuming over sqs()', () => {
   });
 
   test('a Message delivered in SNS’s envelope, raw delivery turned off after consume started, is left the same way and reaches the dead-letter queue intact', async () => {
-    const written = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
     const { publisher, consume, connecting, orders } = await aMessaging({
       limits: limitsWith({ ackWait: '1s', maxDeliver: 3 }),
     });
@@ -434,7 +435,7 @@ describe('consuming over sqs()', () => {
         Message: '{"orderId":"o-1"}',
       });
     });
-    const lines = written.mock.calls.map(([line]) => String(line)).filter(isLeftLine);
+    const lines = printed.filter(isLeftLine);
     expect(lines).toHaveLength(3);
     expect(
       lines.every((line) =>
@@ -445,7 +446,7 @@ describe('consuming over sqs()', () => {
   });
 
   test('an unreadable Message on a queue with a backoff tag gets no visibility change: it is in flight until its next receive, which the visibility timeout brings', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    printedBy('error');
     const { consume, connecting, orders } = await aMessaging({
       limits: limitsWith({ ackWait: ['1s', '1s'], maxDeliver: 3 }),
     });
@@ -521,7 +522,7 @@ describe('consuming over sqs()', () => {
     test.each(attributeCases)(
       'a Message whose $name is $reason is left for the dead-letter queue, its console line naming that attribute',
       async ({ name, attribute }) => {
-        const written = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        const printed = printedBy('error');
         const { consume, connecting, orders } = await aMessaging({
           limits: limitsWith({ ackWait: '1s', maxDeliver: 3 }),
         });
@@ -534,7 +535,7 @@ describe('consuming over sqs()', () => {
         await consume(handlersOf(received), {});
 
         const line = `${orders.notifyQueue}: left SQS message ${id} for the dead-letter queue, since it lacks or cannot read ${name}`;
-        await until(() => expect(written.mock.calls.map(([text]) => String(text))).toContain(line));
+        await until(() => expect(printed).toContain(line));
         await untilInDeadLetterQueue(connecting.sqs, orders.notifyQueue);
         expect(received).toEqual([]);
       },
@@ -543,7 +544,7 @@ describe('consuming over sqs()', () => {
     test.each(Object.keys(valid))(
       'a Message whose %s is a String without a StringValue is left for the dead-letter queue, its console line naming that attribute',
       async (name) => {
-        const written = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        const printed = printedBy('error');
         const { publisher, consume, connecting, orders } = await aMessaging({
           limits: limitsWith({ ackWait: '1s', maxDeliver: 3 }),
         });
@@ -564,8 +565,7 @@ describe('consuming over sqs()', () => {
         const left = `${orders.notifyQueue}: left SQS message `;
         const reason = ` for the dead-letter queue, since it lacks or cannot read ${name}`;
         await until(() => {
-          const lines = written.mock.calls.map(([text]) => String(text));
-          expect(lines.some((line) => line.startsWith(left) && line.endsWith(reason))).toBe(true);
+          expect(printed.some((line) => line.startsWith(left) && line.endsWith(reason))).toBe(true);
         });
         await untilInDeadLetterQueue(connecting.sqs, orders.notifyQueue);
         expect(received).toEqual([]);
@@ -595,7 +595,7 @@ describe('consuming over sqs()', () => {
     ])(
       'a Message whose ApproximateReceiveCount is %s is left for the dead-letter queue, its console line naming it',
       async (_, count) => {
-        const written = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        const printed = printedBy('error');
         const { publisher, consume, connecting, orders } = await aMessaging({
           limits: limitsWith({ ackWait: '1s', maxDeliver: 3 }),
         });
@@ -609,8 +609,7 @@ describe('consuming over sqs()', () => {
         const reason =
           ' for the dead-letter queue, since it lacks or cannot read ApproximateReceiveCount';
         await until(() => {
-          const lines = written.mock.calls.map(([text]) => String(text));
-          expect(lines.some((line) => line.startsWith(left) && line.endsWith(reason))).toBe(true);
+          expect(printed.some((line) => line.startsWith(left) && line.endsWith(reason))).toBe(true);
         });
         await untilInDeadLetterQueue(connecting.sqs, orders.notifyQueue);
         expect(received).toEqual([]);
@@ -661,7 +660,7 @@ describe('consuming over sqs()', () => {
   });
 
   test('a delivery whose onServiceFault throws is left for redelivery', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    printedBy('error');
     const { publisher, consume } = await aMessaging({
       limits: limitsWith({ ackWait: '1s' }),
       onServiceFault: () => {
@@ -691,7 +690,7 @@ describe('consuming over sqs()', () => {
   });
 
   test('a DeleteMessage SQS refuses while consuming reaches neither hook nor the console, and the Message comes back after its wait', async () => {
-    const written = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
     const hooked: unknown[] = [];
     const { publisher, consume, close, connecting, orders } = await aMessaging({
       limits: limitsWith({ ackWait: '1s' }),
@@ -708,7 +707,7 @@ describe('consuming over sqs()', () => {
     await until(() => expect(received).toHaveLength(2));
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
     expect(hooked).toEqual([]);
-    expect(written).not.toHaveBeenCalled();
+    expect(printed).toEqual([]);
     const closing = close();
     await wakeEach(connecting.sqs, [orders.notifyQueue, orders.chargeQueue]);
     await expect(closing).resolves.toBeUndefined();

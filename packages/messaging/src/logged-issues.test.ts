@@ -2,6 +2,7 @@ import { defineEvent, defineGroup, defineService, defineSubscription } from '@cf
 import { handle, readersOf } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
+import { printedBy } from '../../contract/test/printed.ts';
 import {
   type Broker,
   type ConsumedFault,
@@ -86,28 +87,28 @@ async function consuming(options: MessagingOptions = {}) {
 
 describe('messaging: the console lists an ended Message’s Issues', () => {
   test('an ended Message of 1,000 invalid items logs its first 100 Issues and one line counting the other 900', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
     const { deliver } = await consuming();
 
     await deliver({ items: Array(1_000).fill(1) });
 
-    const firstHundred = Array.from({ length: 100 }, (_, index) => [
+    const firstHundred = Array.from({ length: 100 }, (_, index) =>
       expect.stringContaining(`${source}: body.items.${index} invalid_type: `),
-    ]);
-    expect(logged.mock.calls).toEqual([...firstHundred, [`${source}: 900 more Issues`]]);
+    );
+    expect(printed).toEqual([...firstHundred, `${source}: 900 more Issues`]);
   });
 
   test('an ended Message whose Issues each hold a 100 kB key logs only the line counting them', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
     const { deliver } = await consuming();
 
     await deliver({ byKey: { ['k'.repeat(100_000)]: Array(1_000).fill(1) } });
 
-    expect(logged.mock.calls).toEqual([[`${source}: 1000 more Issues`]]);
+    expect(printed).toEqual([`${source}: 1000 more Issues`]);
   });
 
   test('with onServiceFault, the hook receives every Issue and the console nothing', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
     const faults: ConsumedFault[] = [];
     const { deliver } = await consuming({ onServiceFault: (fault) => void faults.push(fault) });
 
@@ -115,6 +116,6 @@ describe('messaging: the console lists an ended Message’s Issues', () => {
 
     expect(faults).toMatchObject([{ kind: 'invalid-body' }]);
     expect(faults[0]?.kind === 'invalid-body' && faults[0].issues).toHaveLength(1_000);
-    expect(logged).not.toHaveBeenCalled();
+    expect(printed).toEqual([]);
   });
 });

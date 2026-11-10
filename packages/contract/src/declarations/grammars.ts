@@ -49,6 +49,15 @@ export const pascalCase: CappedGrammar = {
   maxLength: nameLength,
 };
 
+/** The grammar of a Service's name, which an Application's name follows too: the one place it is named. */
+export const serviceNameGrammar: CappedGrammar = kebabCase;
+
+/** The grammar of a Message name, an Event's or a Command's: the one place it is named. */
+export const messageNameGrammar: CappedGrammar = pascalCase;
+
+/** The grammar of a Subscription's name: the one place it is named. */
+export const subscriptionNameGrammar: CappedGrammar = elementName;
+
 /** The grammar of a Rejection code. */
 export const upperSnakeCase: CappedGrammar = {
   name: 'UPPER_SNAKE_CASE',

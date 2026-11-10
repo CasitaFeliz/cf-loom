@@ -1,11 +1,13 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { type AddressInfo, connect } from 'node:net';
 import { PassThrough, Readable } from 'node:stream';
+import { inspect } from 'node:util';
 import { defineEndpoint, defineGroup, defineGuard, defineService } from '@cf-loom/contract';
 import { admit, handle, success } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
 import { collected, heldOf } from '../../../contract/test/collected.ts';
+import { printedBy } from '../../../contract/test/printed.ts';
 import {
   bodyOf,
   callerSocket,
@@ -674,7 +676,7 @@ describe('nodeHttp', () => {
   });
 
   test('nodeListener answers an Http that rejects with 500 and the Fault Envelope, logs it, and keeps serving', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
     const broken = new Error('the handler broke');
     const rejecting: Http = async (request) => {
       if (new URL(request.url).pathname === '/ok') {
@@ -691,12 +693,12 @@ describe('nodeHttp', () => {
     expect(await rejected.json()).toEqual({
       fault: { committed: 'unknown', retryable: false, message: 'Internal error' },
     });
-    expect(logged).toHaveBeenCalledWith('%s', 'nodeListener: the handler rejected', broken);
+    expect(printed).toContain(`nodeListener: the handler rejected ${inspect(broken)}`);
     expect(after.status).toBe(204);
   });
 
   test('with two requests in flight and an onAnswered that throws on the first, both are answered', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    printedBy('error');
     let records = 0;
     const onAnswered = () => {
       records += 1;

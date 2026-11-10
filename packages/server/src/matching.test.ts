@@ -1,7 +1,9 @@
+import { inspect } from 'node:util';
 import { defineEndpoint, defineGroup, defineService, type Endpoint } from '@cf-loom/contract';
 import { handle, success } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
+import { printedBy } from '../../contract/test/printed.ts';
 import { serve } from './index.ts';
 
 const getOrder = defineEndpoint({
@@ -343,7 +345,7 @@ describe('serve: the fallback', () => {
   });
 
   test('a fallback that rejects is answered with the internal Fault and logged, and the Http resolves', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
     const broken = new Error('the fallback broke');
     const fallback = async () => Promise.reject(broken);
 
@@ -353,6 +355,6 @@ describe('serve: the fallback', () => {
     expect(await response.json()).toEqual({
       fault: { committed: 'unknown', retryable: false, message: 'Internal error' },
     });
-    expect(logged).toHaveBeenCalledWith('%s', 'serve: the fallback rejected', broken);
+    expect(printed).toContain(`serve: the fallback rejected ${inspect(broken)}`);
   });
 });
