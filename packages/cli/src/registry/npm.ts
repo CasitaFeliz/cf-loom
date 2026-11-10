@@ -41,6 +41,35 @@ export type NpmShape<Value> = {
   readonly read: (printed: unknown) => Value | undefined;
 };
 
+/** What npm prints in place of each part of its output it takes for a secret: a URL's password, an npm token, a UUID. */
+export const redactionMark = '***';
+
+/**
+ * Whether npm could have printed `printed` for the text `known`: npm redacts everything it prints,
+ * so each mark stands for any one or more characters it hid. The parts between the marks are
+ * found one after the other, each as early as it can be, so a print with many marks is read in
+ * time linear in its length.
+ */
+export function isPrintOf(printed: string, known: string): boolean {
+  const [first = '', ...others] = printed.split(redactionMark);
+  const last = others.pop();
+  if (last === undefined) {
+    return printed === known;
+  }
+  if (!known.startsWith(first) || !known.endsWith(last)) {
+    return false;
+  }
+  let hidden = first.length;
+  for (const part of others) {
+    const found = known.indexOf(part, hidden + 1);
+    if (found === -1) {
+      return false;
+    }
+    hidden = found + part.length;
+  }
+  return hidden < known.length - last.length;
+}
+
 /** A JSON object npm printed. */
 export type PrintedObject = Readonly<Record<string, unknown>>;
 

@@ -1,11 +1,17 @@
 import { type Failed, failed, lineOf } from '../child-process/index.ts';
-import { jsonFromNpm, type NpmPlace, type Refused, userName } from './npm.ts';
+import {
+  isPrintOf,
+  jsonFromNpm,
+  type NpmPlace,
+  type Refused,
+  redactionMark,
+  userName,
+} from './npm.ts';
 import { viewLabelOf } from './package-versions.ts';
 
 const registrySetting = 'npm_config_registry';
 const workspacesRefusal = 'ENOWORKSPACES';
 const getMarker = ' - GET ';
-const redaction = '***';
 const looksUnpublished = 'a package your login cannot read looks unpublished';
 const removeWorkspaceSetting =
   'remove it from the npm configuration the project reads, its .npmrc files or npm_config_workspace in the environment';
@@ -62,8 +68,8 @@ function refusalLineOf(refusal: Refusal): string {
 
 /**
  * The registry whose URL follows the first ` - GET ` of npm's 404 summary: the URL without its
- * last path segment, which must be the package's name. A URL npm redacted names no registry that
- * `npm whoami` can be pointed at.
+ * last path segment, which must be the package's name or npm's redacted print of it. A registry
+ * URL npm redacted names no registry that `npm whoami` can be pointed at.
  */
 function registryNamedBy(packageName: string, printed: string): Named {
   const label = viewLabelOf(packageName);
@@ -74,18 +80,21 @@ function registryNamedBy(packageName: string, printed: string): Named {
   if (hasRedactedPassword(url)) {
     return failed(`${label} failed: ${credentialsInUrl}`);
   }
-  if (url.includes(redaction)) {
+  const registry = registryOfUrl(url, packageName);
+  if (registry === undefined) {
+    return namesNoRegistry(label, printed);
+  }
+  if (registry.includes(redactionMark)) {
     const redacted = `npm redacted part of the registry URL (${lineOf(url)})`;
     const unnamable = 'so cf-loom cannot name the registry to ask npm whoami';
     return failed(`${label} failed: ${redacted}, ${unnamable}`);
   }
-  const registry = registryOfUrl(url, packageName);
-  return registry === undefined ? namesNoRegistry(label, printed) : { kind: 'registry', registry };
+  return { kind: 'registry', registry };
 }
 
 /** Whether the URL's password is the mark npm prints in place of one. */
 function hasRedactedPassword(url: string): boolean {
-  return URL.canParse(url) && new URL(url).password === redaction;
+  return URL.canParse(url) && new URL(url).password === redactionMark;
 }
 
 function namesNoRegistry(label: string, printed: string): Failed {
@@ -104,7 +113,8 @@ function urlAfterGet(printed: string): string | undefined {
 
 function registryOfUrl(url: string, packageName: string): string | undefined {
   const cut = url.lastIndexOf('/') + 1;
-  return decodedOf(url.slice(cut)) === packageName ? url.slice(0, cut) : undefined;
+  const segment = decodedOf(url.slice(cut));
+  return segment !== undefined && isPrintOf(segment, packageName) ? url.slice(0, cut) : undefined;
 }
 
 function decodedOf(segment: string): string | undefined {

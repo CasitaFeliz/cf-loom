@@ -3681,6 +3681,28 @@ describe.concurrent('cf-loom check', () => {
     });
   });
 
+  test.for([
+    'npm_abcdefghijabcdefghijabcdefghijabcdef',
+    'pkg-123e4567-e89b-12d3-a456-426614174000',
+    '123e4567-e89b-12d3-a456-426614174000',
+    'npm_abcdefghijabcdefghijabcdefghijabcdef-tail',
+    '@org/x-npm_abcdefghijabcdefghijabcdefghijabcdef',
+    '@org/a-123e4567-e89b-12d3-a456-426614174000',
+    '@npm_abcdefghijabcdefghijabcdefghijabcdef/x',
+  ])(
+    'a first check of a Definitions Package named %s settles npm’s 404, though npm prints the name redacted',
+    async (name, { lab }) => {
+      const project = await aGeneratedProject(lab, aBuiltDefinitions({ name }));
+      const registry = await lab.aRegistry({});
+      const env = lab.anNpmEnvironment({ userConfig: defaultLoginTo(registry) });
+
+      const ran = await cfLoomWith(project, env, 'check');
+
+      expect(ran).toMatchObject({ status: 0, stderr: '' });
+      expect(ran.stdout).toContain(neverPublished(registry, name));
+    },
+  );
+
   test('with no Baseline, a Message Version numbered after a gap is refused: check prints it and exits 1', async ({
     lab,
   }) => {

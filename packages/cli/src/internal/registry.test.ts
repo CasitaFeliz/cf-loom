@@ -2158,6 +2158,51 @@ function aNpmThatRefuses404(lab: Lab, summary: string) {
   return { place, asked };
 }
 
+/** A seeded generator of the same sequence every run, so a failing draw can be replayed. */
+function seededNext(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 2 ** 32;
+  };
+}
+
+/** A name of up to `longest` characters, drawn from `alphabet`. */
+function nameFrom(next: () => number, alphabet: string, longest: number): string {
+  const length = Math.floor(next() * (longest + 1));
+  return Array.from({ length }, () => alphabet[Math.floor(next() * alphabet.length)]).join('');
+}
+
+/** What npm could print for `name`: runs of its characters, drawn at random, each replaced by one mark. */
+function redactedPrintOf(next: () => number, name: string): string {
+  let printed = '';
+  for (let at = 0; at < name.length; ) {
+    const hidden = next() < 0.3 ? 1 + Math.floor(next() * (name.length - at)) : 0;
+    printed += hidden === 0 ? name[at] : '***';
+    at += Math.max(hidden, 1);
+  }
+  return printed;
+}
+
+/** `name` with one character dropped, one added or one changed: a name close to it that is not it. */
+function nearlyNamed(next: () => number, name: string): string {
+  const at = Math.floor(next() * (name.length + 1));
+  const character = nameFrom(next, 'ab', 1) || 'a';
+  const kind = Math.floor(next() * 3);
+  if (kind === 0) {
+    return name.slice(0, at) + name.slice(at + 1);
+  }
+  return kind === 1
+    ? name.slice(0, at) + character + name.slice(at)
+    : name.slice(0, at) + character + name.slice(at + 1);
+}
+
+/** The oracle: a regular expression that reads each mark as one or more characters. */
+function couldHide(printed: string, name: string): boolean {
+  const parts = printed.split('***').map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  return new RegExp(`^${parts.join('.+')}$`, 's').test(name);
+}
+
 describe.concurrent('baselineOf and the 404 npm prints', () => {
   const scoped = '@org%2fcontract-orders-service';
 
@@ -2243,5 +2288,127 @@ describe.concurrent('baselineOf and the 404 npm prints', () => {
       `npm view ${ordersPackage} failed: ${redacted}, so cf-loom cannot name the registry to ask npm whoami`,
     );
     expect(asked()).toEqual([]);
+  });
+
+  const secret = 'abcdefghijabcdefghijabcdefghijabcdef';
+  const uuid = '123e4567-e89b-12d3-a456-426614174000';
+  const aDefinitions = { kind: 'definitions', name: 'defs' } as const;
+
+  test.for([
+    ['an unscoped token', `npm_${secret}`, 'npm_***'],
+    ['an unscoped name ending in a UUID', `pkg-${uuid}`, 'pkg-***'],
+    ['an unscoped UUID', uuid, '***'],
+    ['an unscoped token followed by more text', `npm_${secret}-tail`, 'npm_***-tail'],
+    ['a scoped name ending in a token', `@org/x-npm_${secret}`, '@org%2fx-npm_***'],
+    ['a scoped name ending in a UUID', `@org/a-${uuid}`, '@org%2fa-***'],
+    ['a scope that is a token', `@npm_${secret}/x`, '@npm_***%2fx'],
+  ] as const)(
+    'a 404 for %s, which npm prints redacted, is settled on the registry that answered',
+    async ([, packageName, printed], { lab }) => {
+      const summary = `Not Found - GET http://registry.test/proj/${printed} - Not found`;
+      const { place, asked } = aNpmThatRefuses404(lab, summary);
+
+      const read = await baselineOf(place, {
+        packageName,
+        declared: aDefinitions,
+        against: undefined,
+      });
+
+      const registry = 'http://registry.test/proj/';
+      expect(read).toMatchObject({
+        baseline: { kind: 'unknown-package', registry, username: 'tester' },
+      });
+      expect(asked()).toEqual([registry]);
+    },
+  );
+
+  test.for([
+    ['a token with nothing before the mark', 'npm_***'],
+    ['another scoped name', '@org%2fother-***'],
+  ] as const)(
+    'a 404 whose last segment is %s, which cannot be npm’s print of the package, names no registry',
+    async ([, printed], { lab }) => {
+      const summary = `Not Found - GET http://registry.test/${printed}`;
+      const { place, asked } = aNpmThatRefuses404(lab, summary);
+
+      const read = await baselineOf(place, {
+        packageName: ordersPackage,
+        declared: orders,
+        against: undefined,
+      });
+
+      expect(failureIn(read)).toBe(`npm view ${ordersPackage}'s 404 names no registry: ${summary}`);
+      expect(asked()).toEqual([]);
+    },
+  );
+
+  test('a 404 whose registry part and package name are both redacted fails naming the registry', async ({
+    lab,
+  }) => {
+    const packageName = `npm_${secret}`;
+    const url = 'http://registry.test/***/npm_***';
+    const { place, asked } = aNpmThatRefuses404(lab, `Not Found - GET ${url}`);
+
+    const read = await baselineOf(place, {
+      packageName,
+      declared: aDefinitions,
+      against: undefined,
+    });
+
+    const redacted = `npm redacted part of the registry URL (${url})`;
+    expect(failureIn(read)).toBe(
+      `npm view ${packageName} failed: ${redacted}, so cf-loom cannot name the registry to ask npm whoami`,
+    );
+    expect(asked()).toEqual([]);
+  });
+
+  test('a 404 whose last segment holds a hundred marks is judged without trying every way they could hide a name', async ({
+    lab,
+  }) => {
+    const packageName = 'a'.repeat(200);
+    const summary = `Not Found - GET http://registry.test/${'***'.repeat(100)}z`;
+    const { place, asked } = aNpmThatRefuses404(lab, summary);
+
+    const read = await baselineOf(place, {
+      packageName,
+      declared: aDefinitions,
+      against: undefined,
+    });
+
+    expect(failureIn(read)).toBe(`npm view ${packageName}'s 404 names no registry: ${summary}`);
+    expect(asked()).toEqual([]);
+  });
+
+  test('a 404’s last segment is read as a print of the package exactly when each mark can hide one or more characters', async ({
+    lab,
+  }) => {
+    const next = seededNext(635);
+    const registry = 'http://registry.test/';
+    const drawn: { packageName: string; segment: string }[] = [];
+    for (let draw = 0; draw < 240; draw += 1) {
+      const packageName = `a${nameFrom(next, 'ab', 7)}`;
+      const segments = [
+        redactedPrintOf(next, packageName),
+        redactedPrintOf(next, nearlyNamed(next, packageName)),
+        nameFrom(next, 'ab*', 9),
+      ];
+      drawn.push({ packageName, segment: segments[draw % 3] ?? '' });
+    }
+
+    const settled: boolean[] = [];
+    for (const { packageName, segment } of drawn) {
+      const { place } = aNpmThatRefuses404(lab, `Not Found - GET ${registry}${segment}`);
+      const read = await baselineOf(place, {
+        packageName,
+        declared: aDefinitions,
+        against: undefined,
+      });
+      settled.push(read.kind === 'read');
+    }
+
+    const expected = drawn.map(({ packageName, segment }) => couldHide(segment, packageName));
+    expect(expected).toContain(true);
+    expect(expected).toContain(false);
+    expect(settled).toEqual(expected);
   });
 });
