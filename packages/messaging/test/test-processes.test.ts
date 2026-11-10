@@ -235,3 +235,17 @@ describe('a run a test makes through test-process.ts', () => {
     expect(ran.stdout).toBe('asked');
   });
 });
+
+describe('a run that does not exit by itself, through test-process.ts', () => {
+  test('a run a signal ends rejects, naming its command line, the signal and its stderr', async () => {
+    const script = "process.stderr.write('dying'); process.kill(process.pid, 'SIGKILL')";
+
+    const failure = await runProcess(process.execPath, ['-e', script]).catch(
+      (error: unknown) => error,
+    );
+
+    expect(failure).toEqual(
+      new Error(`${process.execPath} -e ${script} was ended by SIGKILL: dying`),
+    );
+  });
+});
