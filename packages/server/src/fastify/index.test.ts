@@ -19,10 +19,17 @@ import Fastify, {
   type FastifyPluginAsync,
   type FastifyServerOptions,
 } from 'fastify';
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
 import { collected, heldOf } from '../../../contract/test/collected.ts';
-import { allowingHttp1, closeSessions, h2, h2Session, selfSigned } from '../../test/h2.ts';
+import {
+  allowingHttp1,
+  closeSessions,
+  h2,
+  h2Session,
+  selfSigned,
+  type Tls,
+} from '../../test/h2.ts';
 import { closeFrameProxies, framesProxy, wireEndOf } from '../../test/h2-frames.ts';
 import {
   closeRawCallers,
@@ -1558,8 +1565,12 @@ describe('fastifyServe', () => {
     });
 
     describe('with allowHTTP1 over TLS', () => {
-      const tls = selfSigned();
+      let tls: Tls;
       const upload = JSON.stringify({ text: 'x'.repeat(300_000) });
+
+      beforeAll(async () => {
+        tls = await selfSigned();
+      });
 
       /** One HTTP/1.1 request over TLS to the server at `url`: its status, headers and body. */
       async function http1OverTls(url: string, path: string, body?: string) {
