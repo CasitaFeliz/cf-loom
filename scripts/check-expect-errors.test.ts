@@ -1,4 +1,3 @@
-import { spawnSync } from 'node:child_process';
 import {
   cpSync,
   mkdirSync,
@@ -11,6 +10,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { runProcess } from '../packages/messaging/test/test-process.ts';
 import { expectErrorProblems } from './check-expect-errors.ts';
 
 const tsconfig = JSON.stringify({
@@ -80,8 +80,8 @@ function aRepositoryWith(sources: Record<string, string[]>): string {
 }
 
 /** The TypeScript server sometimes prints `context canceled` as it stops, whatever the check found. */
-function runCheck(cwd: string): { status: number | null; stderr: string } {
-  const run = spawnSync('node', ['scripts/check-expect-errors.ts'], { cwd, encoding: 'utf8' });
+async function runCheck(cwd: string): Promise<{ status: number; stderr: string }> {
+  const run = await runProcess('node', ['scripts/check-expect-errors.ts'], { cwd });
   const stderr = run.stderr
     .split('\n')
     .filter((line) => line !== 'context canceled')
@@ -288,23 +288,23 @@ describe('expectErrorProblems', () => {
 });
 
 describe('check-expect-errors', () => {
-  it('passes a repository whose directives name the codes their lines fail with', () => {
+  it('passes a repository whose directives name the codes their lines fail with', async () => {
     const repoDir = aRepositoryWith({
       'refused.ts': ['// @ts-expect-error TS2322 a string is no number', "const n: number = 'x';"],
     });
 
-    const run = runCheck(repoDir);
+    const run = await runCheck(repoDir);
 
     expect(run).toEqual({ status: 0, stderr: '' });
   });
 
-  it('prints a problem as path, line and what the line fails with, and fails', () => {
+  it('prints a problem as path, line and what the line fails with, and fails', async () => {
     const repoDir = aRepositoryWith({
       'bare.ts': ['// @ts-expect-error a string is no number', "const n: number = 'x';"],
       'wrong.ts': ['// @ts-expect-error TS2345 a string is no number', "const n: number = 'x';"],
     });
 
-    const run = runCheck(repoDir);
+    const run = await runCheck(repoDir);
 
     expect(run).toEqual({
       status: 1,

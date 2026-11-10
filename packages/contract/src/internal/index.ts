@@ -219,9 +219,11 @@ export type {
   Field,
   NumberNode,
   ObjectNode,
+  Outline,
   Path,
   PipeRefusals,
   RefNode,
+  RefusalKey,
   SchemaNode,
   Site,
   Step,
@@ -229,6 +231,7 @@ export type {
   StringNode,
   TaggedNode,
   TupleNode,
+  Unbuilt,
 } from '../walker/index.ts';
 export {
   anchoredAuthorPathOf,
@@ -240,6 +243,7 @@ export {
   formatConstructorOf,
   isJsonValue,
   isSchema,
+  isWhole,
   refusalsIn,
   siteTextOf,
   snapshotPathOf,
@@ -363,6 +367,7 @@ export {
   isPlainObject,
   isSameRejection,
   issueLineOf,
+  kindWordsOf,
   listedIssueLinesOf,
   messageIdentityOf,
   methodAndPathOf,
@@ -382,5 +387,6 @@ export {
   subscriptionsOf,
   successParts,
   successShapeOf,
+  textOf,
   writtenTextOf,
 } from '../written/index.ts';

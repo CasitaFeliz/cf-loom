@@ -313,12 +313,11 @@ describe('walkSchemas: the checks of a schema whose node fails', () => {
     expect(walkBody(schema)).toEqual(refusedAll([failureAt('', '.default()'), refine]));
   });
 
-  test('a length check on a refused .default() of a number is reported', () => {
+  test('a length check on a refused .default() of a number is not reported', () => {
     const schema: z.ZodType = z.number().default(0);
 
-    const length = failureAt('', minLengthName);
     expect(walkBody(schema.check(z.minLength(1)))).toEqual(
-      refusedAll([failureAt('', '.default()'), length]),
+      refusedAll([failureAt('', '.default()')]),
     );
   });
 
@@ -326,8 +325,7 @@ describe('walkSchemas: the checks of a schema whose node fails', () => {
     const looping: z.ZodType = z.lazy(() => looping.nullable()).check(z.minLength(1));
 
     const cycle = failureAt('', 'a cycle without .meta({ id })', '.meta({ id })');
-    const length = failureAt('', minLengthName);
-    expect(walkBody(looping)).toEqual(refusedAll([cycle, length]));
+    expect(walkBody(looping)).toEqual(refusedAll([cycle]));
   });
 
   test('a lazy that reaches itself before a .nullable() ends the walk', () => {
@@ -343,32 +341,25 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
   type Failure = ReturnType<typeof failureAt>;
 
   const asIs: Decorate = (schema) => schema;
-  const noFailure = (): Failure[] => [];
   const body = '';
   const field = 'a';
   const cycle = (at: string) => [failureAt(at, 'a cycle without .meta({ id })', '.meta({ id })')];
-
-  /** Where a length check on the inner schema is taken: a use of a cycle's schema is a `ref`. */
-  type TakesLength = 'nowhere' | 'anywhere' | 'on itself alone';
 
   const failing = [
     {
       name: 'z.date()',
       make: (decorate: Decorate) => decorate(z.date()),
       refusals: (at: string) => [failureAt(at, 'z.date()', 'z.iso.datetime()')],
-      takesLength: 'nowhere' as TakesLength,
     },
     {
       name: 'a refused .default() of an array',
       make: (decorate: Decorate) => decorate(z.array(z.string()).default([])),
       refusals: (at: string) => [failureAt(at, '.default()')],
-      takesLength: 'anywhere' as TakesLength,
     },
     {
       name: 'a refused .default() of a number',
       make: (decorate: Decorate) => decorate(z.number().default(0)),
       refusals: (at: string) => [failureAt(at, '.default()')],
-      takesLength: 'nowhere' as TakesLength,
     },
     {
       name: 'a cycle through z.lazy()',
@@ -377,7 +368,6 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
         return loop;
       },
       refusals: cycle,
-      takesLength: 'nowhere' as TakesLength,
     },
     {
       name: 'a cycle through .nullable()',
@@ -386,7 +376,6 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
         return loop;
       },
       refusals: cycle,
-      takesLength: 'nowhere' as TakesLength,
     },
     {
       name: 'a cycle through an array',
@@ -395,33 +384,30 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
         return loop;
       },
       refusals: (at: string) => cycle(`${at}[]`),
-      takesLength: 'on itself alone' as TakesLength,
     },
   ];
 
+  /** What each check adds: a length check is judged as a replacement of the refused construct would judge it, so it adds nothing. */
   const checked = [
     {
       name: 'a .refine()',
       apply: (schema: z.ZodType) => schema.refine(isFilled),
-      refusals: (at: string, _taken: Failure[] | undefined) => [failureAt(at, refineName)],
+      refusals: (at: string): Failure[] => [failureAt(at, refineName)],
     },
     {
       name: 'a length check',
       apply: (schema: z.ZodType) => schema.check(z.minLength(1)),
-      refusals: (at: string, taken: Failure[] | undefined) =>
-        taken ?? [failureAt(at, minLengthName)],
+      refusals: (): Failure[] => [],
     },
     {
       name: 'a conditional check',
       apply: (schema: z.ZodType) => schema.check(z.minLength(1, whenAlways)),
-      refusals: (at: string, _taken: Failure[] | undefined) => [
-        failureAt(at, 'a conditional check'),
-      ],
+      refusals: (at: string): Failure[] => [failureAt(at, 'a conditional check')],
     },
     {
       name: 'a .refine() and a conditional check',
       apply: (schema: z.ZodType) => schema.refine(isFilled).check(z.minLength(1, whenAlways)),
-      refusals: (at: string, _taken: Failure[] | undefined) => [
+      refusals: (at: string): Failure[] => [
         failureAt(at, refineName),
         failureAt(at, 'a conditional check'),
       ],
@@ -433,42 +419,32 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
     {
       name: 'on its own',
       at: body,
-      onItself: true,
       surrounding: [] as Failure[],
-      lengthTaken: noFailure,
       build: (inner: Inner, apply: Decorate) => inner.make(apply),
     },
     {
       name: "in a field's .optional()",
       at: field,
-      onItself: false,
       surrounding: [] as Failure[],
-      lengthTaken: (at: string) => [onOptional(at, minLengthName)],
       build: (inner: Inner, apply: Decorate) => z.object({ a: apply(inner.make(asIs).optional()) }),
     },
     {
       name: "in a field's .nonoptional()",
       at: field,
-      onItself: false,
       surrounding: [] as Failure[],
-      lengthTaken: noFailure,
       build: (inner: Inner, apply: Decorate) =>
         z.object({ a: apply(inner.make(asIs).nonoptional()) }),
     },
     {
       name: 'in .nullable()',
       at: body,
-      onItself: false,
       surrounding: [] as Failure[],
-      lengthTaken: (at: string) => [onNull(at, minLengthName)],
       build: (inner: Inner, apply: Decorate) => apply(inner.make(asIs).nullable()),
     },
     {
       name: 'in z.lazy()',
       at: body,
-      onItself: false,
       surrounding: [] as Failure[],
-      lengthTaken: noFailure,
       build: (inner: Inner, apply: Decorate) => {
         const schema = inner.make(asIs);
         return apply(z.lazy(() => schema));
@@ -477,33 +453,17 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
     {
       name: 'in a refused .default()',
       at: body,
-      onItself: false,
       surrounding: [failureAt(body, '.default()')],
-      lengthTaken: noFailure,
       build: (inner: Inner, apply: Decorate) => apply(inner.make(asIs).default(undefined as never)),
     },
   ];
-
-  function takesLength(inner: Inner, place: (typeof places)[number]): boolean {
-    return (
-      inner.takesLength === 'anywhere' ||
-      (inner.takesLength === 'on itself alone' && place.onItself)
-    );
-  }
 
   const cases = places.flatMap((place) =>
     failing.flatMap((inner) =>
       checked.map((checks) => ({
         name: `${checks.name} on ${inner.name} ${place.name}`,
         schema: place.build(inner, checks.apply),
-        failures: [
-          ...place.surrounding,
-          ...inner.refusals(place.at),
-          ...checks.refusals(
-            place.at,
-            takesLength(inner, place) ? place.lengthTaken(place.at) : undefined,
-          ),
-        ],
+        failures: [...place.surrounding, ...inner.refusals(place.at), ...checks.refusals(place.at)],
       })),
     ),
   );
@@ -593,44 +553,51 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
         at: '',
         use: (tree: z.ZodType) => z.lazy(() => tree).check(z.minLength(1)),
         around: [] as ReturnType<typeof failureAt>[],
+        checked: true,
       },
       {
         name: 'through .nullable()',
         at: '',
         use: (tree: z.ZodType) => tree.nullable().check(z.minLength(1)),
         around: [],
+        checked: true,
       },
       {
         name: "through a field's .optional()",
         at: 'a',
         use: (tree: z.ZodType) => z.object({ a: tree.optional().check(z.minLength(1)) }),
         around: [],
+        checked: true,
       },
       {
         name: 'through a refused .default()',
         at: '',
         use: (tree: z.ZodType) => tree.default([]).check(z.minLength(1)),
         around: [failureAt('', '.default()')],
+        checked: false,
       },
     ];
 
-    test.each(uses)('a length check on a use $name of a def is refused', ({ at, use, around }) => {
-      const walked = walkBody(use(treeOf(z.string())));
+    test.each(uses)(
+      'a length check on a use $name of a def is refused, unless the use is refused itself',
+      ({ at, use, around, checked }) => {
+        const walked = walkBody(use(treeOf(z.string())));
 
-      expect(walked.located[0]).toEqual({
-        kind: 'not-allowed',
-        failures: [...around, length(at)],
-      });
-    });
+        expect(walked.located[0]).toEqual({
+          kind: 'not-allowed',
+          failures: [...around, ...(checked ? [length(at)] : [])],
+        });
+      },
+    );
 
     test.each(uses)(
-      'a length check on a use $name of a failing def is refused beside its failure',
-      ({ at, use, around }) => {
+      'a length check on a use $name of a failing def is refused beside its failure, unless the use is refused itself',
+      ({ at, use, around, checked }) => {
         const walked = walkBody(use(treeOf(z.date())));
 
         expect(walked.located[0]).toEqual({
           kind: 'not-allowed',
-          failures: [...around, leafFailure(at), length(at)],
+          failures: [...around, leafFailure(at), ...(checked ? [length(at)] : [])],
         });
       },
     );
@@ -646,7 +613,7 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
     });
   });
 
-  describe('a schema on a cycle no id names is judged as every schema of it would be with an id', () => {
+  describe('a schema on a cycle no id names builds nothing, so no check on it or on a use of it is judged', () => {
     const unnamedCycle = 'a cycle without .meta({ id })';
     type WalkedSchemas = ReturnType<typeof walkSchemas>;
     type WalkedLocation = WalkedSchemas['located'][number];
@@ -690,7 +657,7 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
       },
     ];
 
-    describe('a length check on a use of a schema of the cycle is refused', () => {
+    describe('a length check on a use of a schema of the cycle is not reported', () => {
       const members = [
         {
           name: 'the array',
@@ -742,43 +709,36 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
 
         const walked = walkSchemas(located, () => undefined);
 
-        expect(constructsAt(walked, successAt)).toEqual([
-          ...use.around,
-          unnamedCycle,
-          minLengthName,
-        ]);
+        expect(constructsAt(walked, successAt)).toEqual([...use.around, unnamedCycle]);
       });
     });
 
-    describe('the own checks of a schema of the cycle are judged by the node its own def builds', () => {
+    describe('the own length check of a schema of the cycle is not reported', () => {
       const ownChecks = [
         {
-          name: 'the array takes its own length check',
+          name: 'the array',
           make: () => {
             const children: z.ZodType = z.lazy(() => loop);
             const loop = z.array(children).check(z.minLength(1));
             return { schema: loop, other: children };
           },
-          refused: [] as string[],
         },
         {
-          name: 'the z.lazy() standing for it refuses its own length check',
+          name: 'the z.lazy() standing for it',
           make: () => {
             const children: z.ZodType = z.lazy(() => loop).check(z.minLength(1));
             const loop = z.array(children);
             return { schema: children, other: loop };
           },
-          refused: [minLengthName],
         },
         {
-          name: 'the .nullable() standing for it refuses its own length check',
+          name: 'the .nullable() standing for it',
           make: () => {
             const children: z.ZodType = z.lazy(() => loop);
             const nullable: z.ZodType = z.array(children).nullable();
             const loop = nullable.check(z.minLength(1));
             return { schema: loop, other: children };
           },
-          refused: [minLengthName],
         },
       ];
       const cases = ownChecks.flatMap((own) =>
@@ -790,7 +750,7 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
 
         const walked = walkSchemas(order.locate(other, schema), () => undefined);
 
-        expect(constructsOf(walked)).toEqual([unnamedCycle, ...own.refused]);
+        expect(constructsOf(walked)).toEqual([unnamedCycle]);
       });
     });
 
@@ -1173,4 +1133,68 @@ describe('walkSchemas: a check on a schema that admits null or undefined', () =>
       expect(object.safeParse({}).success).toBe(true);
     },
   );
+});
+
+describe('walkSchemas: a check on a refused construct, whose replacement decides what it means', () => {
+  const date = failureAt('', 'z.date()', 'z.iso.datetime()');
+  const refine = failureAt('', refineName);
+  const set = failureAt('', 'z.set()');
+  const minLength = z.minLength(1);
+
+  test.each<[string, z.ZodType, z.ZodType]>([
+    ['z.date().min()', z.date(), z.date().min(new Date(0))],
+    ['z.bigint().gte()', z.bigint(), z.bigint().gte(1n)],
+    ['z.date().max()', z.date(), z.date().max(new Date(0))],
+    ['z.date().check(z.minLength())', z.date(), z.date().check(minLength as never)],
+    ['z.date().check(z.multipleOf())', z.date(), z.date().check(z.multipleOf(2) as never)],
+  ])('a check a type takes on a refused type is not reported: %s', (_name, bare, checked) => {
+    expect(walkBody(checked)).toEqual(walkBody(bare));
+  });
+
+  test('a length check on a date inside .nullable() is not reported, nor refused as on null', () => {
+    const schema = z
+      .date()
+      .nullable()
+      .check(minLength as never);
+
+    expect(walkBody(schema)).toEqual(refusedAll([date]));
+  });
+
+  test("a length check on a date inside a field's .optional() is not reported, nor refused as on it", () => {
+    const schema = z.object({
+      a: z
+        .date()
+        .optional()
+        .check(minLength as never),
+    });
+
+    expect(walkBody(schema)).toEqual(refusedAt('a', 'z.date()', 'z.iso.datetime()'));
+  });
+
+  test('a .refine() on a date is reported, since no type takes it', () => {
+    expect(walkBody(z.date().refine(isFilled))).toEqual(refusedAll([date, refine]));
+  });
+
+  test('a .refine() on a date inside .nullable() is reported', () => {
+    expect(walkBody(z.date().nullable().refine(isFilled))).toEqual(refusedAll([date, refine]));
+  });
+
+  test('a conditional check on a date is reported, since no type takes it', () => {
+    const schema = z.date().check(z.minLength(1, whenAlways) as never);
+
+    expect(walkBody(schema)).toEqual(refusedAll([date, failureAt('', 'a conditional check')]));
+  });
+
+  test('a size check on a set is reported, since no type of the Contract takes it', () => {
+    expect(walkBody(z.set(z.string()).min(1))).toEqual(
+      refusedAll([set, failureAt('', '.min(), .nonempty() or z.minSize()')]),
+    );
+  });
+
+  test('a length check on a schema on a cycle no id names is not reported', () => {
+    const looping: z.ZodType = z.lazy(() => looping.nullable()).check(z.minLength(1));
+
+    const cycle = failureAt('', 'a cycle without .meta({ id })', '.meta({ id })');
+    expect(walkBody(looping)).toEqual(refusedAll([cycle]));
+  });
 });

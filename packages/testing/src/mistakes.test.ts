@@ -249,8 +249,8 @@ describe('fakeProvider: a test’s mistakes', () => {
     { label: '{}', given: {}, named: 'an object' },
     { label: 'Object.create(null)', given: Object.create(null), named: 'an object' },
     { label: '[1]', given: [1], named: 'a list' },
-    { label: '1n', given: 1n, named: '1' },
-    { label: 'Symbol("x")', given: Symbol('x'), named: 'Symbol(x)' },
+    { label: '1n', given: 1n, named: 'a bigint' },
+    { label: 'Symbol("x")', given: Symbol('x'), named: 'a symbol' },
   ])(
     'r.fault with retryAfter $label is a mistake naming the retryAfter rule',
     async ({ given, named }) => {
@@ -312,8 +312,8 @@ describe('fakeProvider: a test’s mistakes', () => {
     { label: 'undefined', given: undefined, named: 'undefined' },
     { label: 'null', given: null, named: 'null' },
     { label: '1', given: 1, named: '1' },
-    { label: '1n', given: 1n, named: '1' },
-    { label: 'Symbol("x")', given: Symbol('x'), named: 'Symbol(x)' },
+    { label: '1n', given: 1n, named: 'a bigint' },
+    { label: 'Symbol("x")', given: Symbol('x'), named: 'a symbol' },
   ])(
     'r.reserved($label) is a mistake naming the Reserved codes, never a TypeError',
     async ({ given, named }) => {

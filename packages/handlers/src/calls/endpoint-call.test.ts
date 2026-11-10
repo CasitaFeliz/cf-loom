@@ -9,8 +9,10 @@ import {
   notFound,
   notImplemented,
 } from '@cf-loom/contract';
+import { textOf, unbrokenLineOf } from '@cf-loom/contract/internal';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
+import { aHookThatThrows, foreignValues } from '../../../contract/test/foreign-values.ts';
 import { lineBreakPattern, lineBreaks } from '../../../contract/test/line-breaks.ts';
 import {
   type CheckedOutcome,
@@ -982,7 +984,7 @@ describe('fault() retryAfter', () => {
     { label: '{}', given: {}, named: 'an object' },
     { label: 'Object.create(null)', given: Object.create(null), named: 'an object' },
     { label: '[1]', given: [1], named: 'a list' },
-    { label: '1n', given: 1n, named: '1' },
+    { label: '1n', given: 1n, named: 'a bigint' },
   ])('fault() refuses a retryAfter of $label, naming it as a written value', ({ given, named }) => {
     const building = () => fault({ committed: 'no', retryable: true, retryAfter: given as number });
 
@@ -1259,5 +1261,71 @@ describe('an EndpointHandler stub', () => {
     expectTypeOf<Rejected['rejection']>().toEqualTypeOf<
       typeof notFound | typeof orderLocked | typeof unauthenticated | typeof notImplemented
     >();
+  });
+});
+
+/** What a Handler of `getOrder` can return that its types do not allow: each value of the pool, a string and an absent value. */
+function foreignOf(
+  hooked: () => unknown,
+): readonly { readonly label: string; readonly value: unknown }[] {
+  return [
+    ...foreignValues(hooked),
+    { label: 'a string', value: 'FORBIDDEN' },
+    { label: 'absent', value: undefined },
+  ];
+}
+
+function issueMessagesOf(error: InvalidOutcomeError): readonly string[] {
+  return error.issues.map(({ message }) => message);
+}
+
+describe('an EndpointHandler returning what its types do not allow, shown without running its code', () => {
+  test('a Rejection whose code is no string is refused as one the Endpoint does not answer, named by its kind, never a Fault', async () => {
+    const ran: string[] = [];
+    const refused: Record<string, unknown> = {};
+    const expected: Record<string, unknown> = {};
+    for (const { label, value } of foreignOf(aHookThatThrows(ran))) {
+      const getOrderHandler = handle(
+        getOrder,
+        () => ({ kind: 'rejection', rejection: { code: value } }) as never,
+      );
+
+      const refusal = await getOrderHandler(getInput, { context: getContext }).then(
+        (outcome) => outcome,
+        (error: unknown) => (error instanceof InvalidOutcomeError ? issueMessagesOf(error) : error),
+      );
+
+      refused[label] = refusal;
+      const shown = value === undefined ? 'A value that is no Rejection' : textOf(value);
+      expected[label] = [`${shown} is not a Rejection getOrder answers`];
+    }
+
+    expect(refused).toEqual(expected);
+    expect(ran).toEqual([]);
+  });
+
+  test('a Handler that returns a kind that is no string is told by that kind’s word, never its content', async () => {
+    const ran: string[] = [];
+    const told: Record<string, unknown> = {};
+    const expected: Record<string, unknown> = {};
+    for (const { label, value } of foreignOf(aHookThatThrows(ran))) {
+      const getOrderHandler = handle(getOrder, () => ({ kind: value }) as never);
+
+      const outcome = await getOrderHandler(getInput, { context: getContext });
+
+      told[label] = outcome;
+      expected[label] = {
+        kind: 'fault',
+        committed: 'unknown',
+        retryable: false,
+        message: 'Internal error',
+        cause: new TypeError(
+          unbrokenLineOf(`getOrder's Handler returned no Outcome but the kind ${textOf(value)}`),
+        ),
+      };
+    }
+
+    expect(told).toEqual(expected);
+    expect(ran).toEqual([]);
   });
 });

@@ -7,6 +7,7 @@ import {
   ownOf,
   parsedShapeOf,
   rejectionShapeOf,
+  textOf,
 } from '@cf-loom/contract/internal';
 import type { AnyRejection, BuiltRejection } from '../outcomes/index.ts';
 import { type Checked, mapValue } from './checked.ts';
@@ -92,5 +93,5 @@ function codeOf(rejection: unknown): string {
   if (isStandardRejection(rejection)) {
     return rejection.name;
   }
-  return String(ownOf(rejection, 'code') ?? 'A value that is no Rejection');
+  return textOf(ownOf(rejection, 'code') ?? 'A value that is no Rejection');
 }

@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import {
   type ClientHttp2Session,
@@ -10,6 +9,7 @@ import {
 } from 'node:http2';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { runForOutput } from '../../messaging/test/test-process.ts';
 
 /** What came back on one HTTP/2 stream once it closed. */
 export type H2Answer = {
@@ -103,20 +103,16 @@ async function bodySent(stream: ClientHttp2Stream, body: Buffer): Promise<number
 }
 
 /** A key and certificate made by `openssl` on `PATH`, valid one day, so none is committed. */
-export function selfSigned(): Tls {
+export async function selfSigned(): Promise<Tls> {
   const directory = mkdtempSync(join(tmpdir(), 'cf-loom-tls-'));
   try {
     const keyFile = join(directory, 'key.pem');
     const certFile = join(directory, 'cert.pem');
-    execFileSync(
-      'openssl',
-      [
-        ...['req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:prime256v1'],
-        ...['-nodes', '-days', '1', '-subj', '/CN=localhost'],
-        ...['-keyout', keyFile, '-out', certFile],
-      ],
-      { stdio: 'ignore' },
-    );
+    await runForOutput('openssl', [
+      ...['req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:prime256v1'],
+      ...['-nodes', '-days', '1', '-subj', '/CN=localhost'],
+      ...['-keyout', keyFile, '-out', certFile],
+    ]);
     return { key: readFileSync(keyFile), cert: readFileSync(certFile) };
   } finally {
     rmSync(directory, { recursive: true, force: true });

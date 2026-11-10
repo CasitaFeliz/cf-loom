@@ -1,10 +1,52 @@
-import { inspect } from 'node:util';
-import { joinedOf } from '@cf-loom/contract/internal';
+import { inspect, types } from 'node:util';
+import { joinedOf, kindWordsOf } from '@cf-loom/contract/internal';
 import { z } from 'zod';
 
-/** A JSON value as a refusal shows it, on one line however many entries it holds: `[ '30s', '0s' ]`, `'7 days'`, `0`. */
+/** What a refusal shows of a list: its first entries and its nesting, which the copy and `inspect` both read. */
+const shown = { depth: 2, maxArrayLength: 100 } as const;
+
+/** A value with no text of its own, which `inspect` prints as the words of its kind. */
+function worded(words: string): object {
+  return { [inspect.custom]: () => words };
+}
+
+/**
+ * The part of a value a refusal shows, copied by reading it through `kindWordsOf`, `types.isProxy`
+ * and own data properties only, so that `inspect` of the copy runs none of the value's code: what
+ * has text of its own and lists held as data stay, anything else is worded.
+ */
+function shownCopyOf(value: unknown, depth: number): unknown {
+  const words = kindWordsOf(value);
+  if (words === undefined) {
+    return value;
+  }
+  if (types.isProxy(value) || !Array.isArray(value)) {
+    return worded(words);
+  }
+  if (depth > shown.depth) {
+    return new Array(value.length);
+  }
+  const held: unknown[] = [];
+  for (let at = 0; at < Math.min(value.length, shown.maxArrayLength); at++) {
+    const own = Object.getOwnPropertyDescriptor(value, at);
+    if (own === undefined || !('value' in own)) {
+      return worded(words);
+    }
+    held.push(shownCopyOf(own.value, depth + 1));
+  }
+  held.length = value.length;
+  return held;
+}
+
+/**
+ * A refused value as a refusal shows it, as far as a setting's type lets it be one and running none
+ * of its code: a string, number, boolean, `null` or `undefined` as `util.inspect` prints it
+ * (`'7 days'`, `0`), a list held as data with its first 100 entries, three levels of nesting
+ * (`[ '30s', '0s' ]`), anything else in the words of its kind (`an object`, `a list`, `a function`,
+ * `a symbol`, `a bigint`).
+ */
 export function oneLineOf(value: unknown): string {
-  return inspect(value, { breakLength: Infinity, compact: true });
+  return inspect(shownCopyOf(value, 0), { ...shown, breakLength: Infinity, compact: true });
 }
 
 /** A setting read by `read`, which answers undefined for what it refuses, as an issue that shows the value on one line: `<value> is not <expected>`. */

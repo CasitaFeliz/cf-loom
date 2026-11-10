@@ -1,18 +1,15 @@
-import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
+import { runProcess } from '../../../packages/messaging/test/test-process.ts';
 
 const serviceDir = join(import.meta.dirname, '..');
 const bin = join(serviceDir, 'node_modules/@cf-loom/cli/dist/bin.js');
 const snapshot = JSON.parse(readFileSync(join(serviceDir, 'contract.snapshot.json'), 'utf8'));
 
 describe('the committed generated files', () => {
-  test('cf-loom verify finds them up to date', () => {
-    const verified = spawnSync(process.execPath, [bin, 'verify'], {
-      cwd: serviceDir,
-      encoding: 'utf8',
-    });
+  test('cf-loom verify finds them up to date', async () => {
+    const verified = await runProcess(process.execPath, [bin, 'verify'], { cwd: serviceDir });
 
     expect({ status: verified.status, stderr: verified.stderr }).toEqual({ status: 0, stderr: '' });
   });

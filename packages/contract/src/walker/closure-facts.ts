@@ -1,6 +1,5 @@
 import { refsWrittenIn } from './children.ts';
-import type { SchemaNode } from './nodes.ts';
-import type { Defs } from './walk.ts';
+import type { DefsOf, Outline } from './walked.ts';
 
 /** The defs whose nodes write a `ref` to each name, and every name a def or a `ref` gives. */
 export type Referrers = {
@@ -8,8 +7,8 @@ export type Referrers = {
   readonly referrersByName: ReadonlyMap<string, readonly string[]>;
 };
 
-/** The referrers of a Defs, found by reading each def's own nodes once. */
-export function referrersOf(defs: Defs): Referrers {
+/** The referrers of some defs, found by reading each def's own nodes once. */
+export function referrersOf(defs: DefsOf): Referrers {
   const namesGiven = new Set(Object.keys(defs));
   const referrersByName = new Map<string, string[]>();
   for (const [name, def] of Object.entries(defs)) {
@@ -27,10 +26,10 @@ export function referrersOf(defs: Defs): Referrers {
 }
 
 /** The closure facts of the defs the referrers index, from the facts `ownFactsOf` gives each. */
-export function closureFactsFrom<Fact>(
+export function closureFactsFrom<Fact, Node extends Outline>(
   referrers: Referrers,
-  def: (name: string) => SchemaNode | undefined,
-  ownFactsOf: (name: string, def: SchemaNode | undefined) => Iterable<Fact>,
+  def: (name: string) => Node | undefined,
+  ownFactsOf: (name: string, def: Node | undefined) => Iterable<Fact>,
 ): ReadonlyMap<string, ReadonlySet<Fact>> {
   const facts = new Map(
     [...referrers.namesGiven].map((name): [string, Set<Fact>] => [name, new Set()]),

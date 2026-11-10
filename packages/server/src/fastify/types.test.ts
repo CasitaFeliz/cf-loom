@@ -130,7 +130,7 @@ describe('fastifyServe: where it registers', () => {
 
   test('the plugin registers on an HTTP/2 app, plaintext or over TLS with allowHTTP1', async () => {
     const h2c = Fastify({ http2: true });
-    const overTls = Fastify({ http2: true, https: allowingHttp1(selfSigned()) });
+    const overTls = Fastify({ http2: true, https: allowingHttp1(await selfSigned()) });
 
     await h2c.register(fastifyServe(contract, handlers, {}));
     await overTls.register(fastifyServe(contract, handlers, {}));

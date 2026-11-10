@@ -1,4 +1,4 @@
-import { unbrokenLineOf } from '@cf-loom/contract/internal';
+import { textOf, unbrokenLineOf } from '@cf-loom/contract/internal';
 import { nameOf } from './errors.ts';
 import type { Handled } from './handled.ts';
 
@@ -46,7 +46,7 @@ function describedOf(built: unknown): string {
     return 'null';
   }
   if (typeof built === 'object' && 'kind' in built) {
-    return `the kind ${String(built.kind)}`;
+    return `the kind ${textOf(built.kind)}`;
   }
   return typeof built;
 }

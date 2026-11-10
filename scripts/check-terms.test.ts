@@ -1,4 +1,3 @@
-import { spawnSync } from 'node:child_process';
 import {
   cpSync,
   mkdirSync,
@@ -11,6 +10,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { runProcess } from '../packages/messaging/test/test-process.ts';
 import { misspelledTerms, multiWordTerms, type TermMisspelling } from './check-terms.ts';
 import { type Container, containers, type MarkdownBlock, placed } from './markdown-containers.ts';
 import { aSeededDraw, type Draw, pickFrom } from './seeded-draw.ts';
@@ -36,11 +36,8 @@ function aRepositoryWith(files: Record<string, string>): string {
   return repositoryDir;
 }
 
-function runCheckTerms(repositoryDir: string): { status: number | null; stderr: string } {
-  const run = spawnSync('node', ['scripts/check-terms.ts'], {
-    cwd: repositoryDir,
-    encoding: 'utf8',
-  });
+async function runCheckTerms(repositoryDir: string): Promise<{ status: number; stderr: string }> {
+  const run = await runProcess('node', ['scripts/check-terms.ts'], { cwd: repositoryDir });
   return { status: run.status, stderr: run.stderr };
 }
 
@@ -680,13 +677,13 @@ describe('misspelledTerms over every holder in every container', () => {
 });
 
 describe('node scripts/check-terms.ts', () => {
-  it('names the document, the line and the term, and exits with status 1', () => {
+  it('names the document, the line and the term, and exits with status 1', async () => {
     const repositoryDir = aRepositoryWith({
       'CONTEXT.md': '**Direct call**:\nCalling a Handler.\n',
       'README.md': 'Some prose.\nA direct call here.\n',
     });
 
-    const run = runCheckTerms(repositoryDir);
+    const run = await runCheckTerms(repositoryDir);
 
     expect(run).toEqual({
       status: 1,
@@ -694,29 +691,29 @@ describe('node scripts/check-terms.ts', () => {
     });
   });
 
-  it('writes the plural of the term when the document writes a plural', () => {
+  it('writes the plural of the term when the document writes a plural', async () => {
     const repositoryDir = aRepositoryWith({
       'CONTEXT.md': '**Broker prefix**:\nA name.\n',
       'README.md': 'Two broker prefixes.\n',
     });
 
-    const run = runCheckTerms(repositoryDir);
+    const run = await runCheckTerms(repositoryDir);
 
     expect(run.stderr).toBe('README.md:1 terms: write "Broker prefixes", not "broker prefixes".\n');
   });
 
-  it('exits 0 when every term is spelled as the glossary spells it', () => {
+  it('exits 0 when every term is spelled as the glossary spells it', async () => {
     const repositoryDir = aRepositoryWith({
       'CONTEXT.md': '**Direct call**:\nCalling a Handler.\n',
       'README.md': 'A Direct call and a `direct call`.\n',
     });
 
-    const run = runCheckTerms(repositoryDir);
+    const run = await runCheckTerms(repositoryDir);
 
     expect(run).toEqual({ status: 0, stderr: '' });
   });
 
-  it("reads the root documents and each package's README.md and ARCHITECTURE.md, and skips CHANGELOG.md", () => {
+  it("reads the root documents and each package's README.md and ARCHITECTURE.md, and skips CHANGELOG.md", async () => {
     const wrong = 'A direct call.\n';
     const repositoryDir = aRepositoryWith({
       'CONTEXT.md': '**Direct call**:\nCalling a Handler.\n',
@@ -729,7 +726,7 @@ describe('node scripts/check-terms.ts', () => {
       '.claude/agents/agent.md': wrong,
     });
 
-    const run = runCheckTerms(repositoryDir);
+    const run = await runCheckTerms(repositoryDir);
 
     expect(run).toEqual({
       status: 1,

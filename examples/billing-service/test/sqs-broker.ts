@@ -17,5 +17,5 @@ export async function applyPlanOf(
   connecting: SqsConnecting,
   prefix: string,
 ): Promise<void> {
-  await applyBrokerPlan(connecting, planOf(serviceDir, prefix), testLimits);
+  await applyBrokerPlan(connecting, await planOf(serviceDir, prefix), testLimits);
 }

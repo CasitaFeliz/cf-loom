@@ -1,4 +1,4 @@
-import { defsOf, offCycle, refuseNodelessCycles, writeDef } from './cycle-defs.ts';
+import { defsOf, judgedDefsOf, offCycle, refuseNodelessCycles, writeDef } from './cycle-defs.ts';
 import { startMemos } from './memos.ts';
 import { droppedIdOf, hasOwnId, writtenIdOf } from './metadata.ts';
 import type { NotAllowed, SchemaNode } from './nodes.ts';
@@ -11,7 +11,14 @@ import {
   type State,
 } from './recursion-state.ts';
 import { startRemembered } from './remembered.ts';
-import { type Composition, type Memo, type Walked, type Walking, walked } from './walked.ts';
+import {
+  type Composition,
+  type JudgedDefs,
+  type Memo,
+  type Walked,
+  type Walking,
+  walked,
+} from './walked.ts';
 import { writtenDepthOf, writtenNestingLimit } from './written-depth.ts';
 
 /**
@@ -23,9 +30,11 @@ import { writtenDepthOf, writtenNestingLimit } from './written-depth.ts';
 export type Recursion = {
   readonly within: (entering: Entering, walk: () => Walking) => Walking;
   readonly defs: () => Readonly<Record<string, SchemaNode>>;
+  /** Every def the walk wrote or was writing, by its id, a def that failed included. */
+  readonly judgedDefs: () => JudgedDefs;
   /** Each declaration walks afresh a cycle no id names, which has no identity to share, and what holds one. */
   readonly forgetUnnamedCycles: () => void;
-  /** A composition the walk built, whose refusal is raised inside the remembered schema it is built in. */
+  /** A composition the walk built or was building, whose refusal is raised inside the remembered schema it is built in. */
   readonly built: (composition: Composition) => void;
   /** The remembered schema each refusal was raised inside, those of compositions included. */
   readonly memoOf: ReadonlyMap<NotAllowed, Memo>;
@@ -44,6 +53,7 @@ export function startRecursion(): Recursion {
   return {
     within: (entering, walk) => within(state, entering, walk),
     defs: () => defsOf(state),
+    judgedDefs: () => judgedDefsOf(state),
     forgetUnnamedCycles: () => forgetUnnamedCycles(state),
     built: (composition) => state.memos.built(composition),
     memoOf: state.memos.memoOf,

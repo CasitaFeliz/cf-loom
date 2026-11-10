@@ -27,7 +27,7 @@ export type Memos = {
   readonly reached: (schema: core.$ZodType, at: Reached) => void;
   /** Refusals the walk returns, the first time each is returned being where it was raised. */
   readonly raised: (tree: FailureTree) => void;
-  /** An `allOf` or a `union` node the walk built, whose refusal joins those no remembered schema has claimed. */
+  /** An `allOf` or a `union` node the walk built or was building, whose refusal joins those no remembered schema has claimed. */
   readonly built: (composition: Composition) => void;
   /**
    * Refusals of a remembered schema itself, judged after its walk closed: its memo claims them,

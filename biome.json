@@ -160,6 +160,7 @@
     "./lint/no-spread-push.grit",
     "./lint/no-test-timeout.grit",
     "./lint/no-zod-derived-getters.grit",
+    "./lint/test-processes-owned.grit",
     "./lint/written-lines.grit"
   ],
   "vcs": {

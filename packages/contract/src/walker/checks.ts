@@ -30,7 +30,8 @@ export type CheckedAt = { readonly at: Reached; readonly kind: CheckedKind };
 
 /**
  * A walked schema with the constraint of each of its checks, by what its node's type takes; a
- * failed walk gains the checks' refusals, judged by the node it was building, beside its failures.
+ * failed walk gains the checks' refusals, judged by the node it was building, beside its failures,
+ * and a check on a part the walk refused is judged only when no type takes it.
  */
 export function constrain(
   walkedSchema: Walked,
@@ -61,10 +62,14 @@ function emptinessFailuresOf(outline: Outline, at: Reached): readonly NotAllowed
 
 /**
  * A check belongs to the schema it constrains, so where its schema admits more than its node
- * does, `null` or an absent field, the constraint is refused.
+ * does, `null` or an absent field, the constraint is refused; on an `Unbuilt` part it is judged
+ * as every replacement would judge it, whether the schema admits more or not.
  */
 function constraintOfSchema(outline: Outline, kind: CheckedKind): ConstraintOf<object> {
   const taken = constraintOfType(outline.type);
+  if (outline.type === undefined) {
+    return taken;
+  }
   switch (kind) {
     case 'optional':
       return refusedOnWiderSchema(taken, refusedCheckOnOptional);

@@ -1,11 +1,9 @@
 import { prototypeNames } from '../declarations/index.ts';
 import { catchallRefusalKeyOf, type DefOfType, defOf } from './def-types.ts';
-import { heldNodeOf } from './held-node.ts';
 import { inside } from './location.ts';
-import type { Field, ObjectNode, SchemaNode, StringNode } from './nodes.ts';
+import type { Field, FieldOf } from './nodes.ts';
 import { notAllowed, type Refused, refused, refusedObjectNameField } from './not-allowed.ts';
-import { shapeKey } from './shapes.ts';
-import { fieldStep, indexStep, keyStep, valueStep } from './steps.ts';
+import { fieldStep } from './steps.ts';
 import {
   allWalked,
   failed,
@@ -28,17 +26,33 @@ const inheritedKeys: ReadonlySet<string> = new Set(prototypeNames);
 export function* walkObject(def: DefOfType<'object'>, at: Reached, walker: Walker): Walking {
   const catchall = catchallRefusalOf(def);
   const refusals = catchall === undefined ? [] : [notAllowed(at, catchall)];
-  const fieldEntries: Walked<[string, Field]>[] = [];
+  const fieldEntries: Walked<[string, Field], FieldOf<Outline>>[] = [];
+  const kept: [string, FieldOf<Outline>][] = [];
+  let isNameRefused = false;
   for (const [key, schema] of Object.entries(def.shape)) {
-    fieldEntries.push(
-      yield* walkNamedField(key, { at: inside(at, fieldStep(key)), schema }, walker),
-    );
+    isNameRefused ||= fieldNameRefusalOf(key) !== undefined;
+    const entry = yield* walkNamedField(key, { at: inside(at, fieldStep(key)), schema }, walker);
+    fieldEntries.push(entry);
+    const field = keptFieldOf(entry);
+    if (field !== undefined) {
+      kept.push([key, field]);
+    }
   }
   const fields = allWalked(fieldEntries);
-  if (refusals.length > 0 || fields.kind === 'not-allowed') {
-    return failed(failuresOf([...refusals, fields]), { type: 'object' });
+  if (refusals.length > 0 || isNameRefused) {
+    return failed(failuresOf([...refusals, fields]));
+  }
+  if (fields.kind === 'not-allowed') {
+    return failed(fields.tree, { type: 'object', fields: Object.fromEntries(kept) });
   }
   return walked({ type: 'object', fields: Object.fromEntries(fields.value) });
+}
+
+/** The field a field's walk built or was building, none when it kept none. */
+function keptFieldOf(
+  entry: Walked<[string, Field], FieldOf<Outline>>,
+): FieldOf<Outline> | undefined {
+  return entry.kind === 'walked' ? entry.value[1] : entry.outline;
 }
 
 /** A field walked by its name, or refused beside what lies inside it when zod cannot read the name. */
@@ -46,7 +60,7 @@ function* walkNamedField(
   key: string,
   field: ReachedChild,
   walker: Walker,
-): Walking<[string, Field]> {
+): Walking<[string, Field], FieldOf<Outline>> {
   const refusal = fieldNameRefusalOf(key);
   if (refusal !== undefined) {
     return yield* refusedNameFailure(refusal, field, walker);
@@ -67,54 +81,9 @@ function* refusedNameFailure(
   refusal: Refused,
   { at, schema }: ReachedChild,
   walker: Walker,
-): Walking<never> {
-  return failed(failuresOf([notAllowed(at, refusal), yield* walker.field(schema, at)]));
-}
-
-/**
- * A `record` for a string key, partial or not; a record keyed by an enum or literal is a strict
- * object, which a Contract never declares.
- */
-export function* walkRecord(def: DefOfType<'record'>, at: Reached, walker: Walker): Walking {
-  const key = yield* walker.schema(def.keyType, inside(at, keyStep));
-  const value = yield* walker.schema(def.valueType, inside(at, valueStep));
-  const record: Outline = { type: 'record' };
-  if (def.mode === 'loose') {
-    return failed(failuresOf([notAllowed(at, refused.looseRecord), key, value]), record);
-  }
-  if (key.kind === 'not-allowed') {
-    return failed(failuresOf([key, value]), record);
-  }
-  const recordKey = recordKeyOf(key.value);
-  if (recordKey.kind === 'refused') {
-    return failed(failuresOf([notAllowed(at, recordKey.refusal), value]), record);
-  }
-  if (value.kind === 'not-allowed') {
-    return failed(value.tree, record);
-  }
-  return walked({ type: 'record', key: recordKey.node, value: value.value });
-}
-
-/**
- * One open object for an intersection of open objects whose shared keys agree, which fails
- * otherwise; any other intersection is `allOf`.
- */
-export function* walkIntersection(
-  def: DefOfType<'intersection'>,
-  at: Reached,
-  walker: Walker,
-): Walking {
-  const left = yield* walker.schema(def.left, inside(at, indexStep(0)));
-  const right = yield* walker.schema(def.right, inside(at, indexStep(1)));
-  const items = allWalked([left, right]);
-  if (items.kind === 'not-allowed') {
-    return failed(items.tree, { type: 'allOf' });
-  }
-  const [leftNode, rightNode] = items.value;
-  if (leftNode?.type === 'object' && rightNode?.type === 'object') {
-    return mergedObjects(leftNode, rightNode, at);
-  }
-  return walked(heldNodeOf({ type: 'allOf', items: items.value }, []));
+): Walking<never, FieldOf<Outline>> {
+  const inner = yield* walker.field(schema, at);
+  return { kind: 'not-allowed', tree: failuresOf([notAllowed(at, refusal), inner]) };
 }
 
 /**
@@ -129,43 +98,9 @@ function catchallRefusalOf(def: DefOfType<'object'>): Refused | undefined {
   return catchall === undefined ? refused.notZod4 : refused[catchallRefusalKeyOf(catchall.type)];
 }
 
-/** A walked key that can key a `record`, or why it cannot: only a string, not nullable, can. */
-type RecordKey =
-  | { readonly kind: 'string'; readonly node: StringNode }
-  | { readonly kind: 'refused'; readonly refusal: Refused };
-
-function recordKeyOf(key: SchemaNode): RecordKey {
-  if (key.nullable === true) {
-    return { kind: 'refused', refusal: refused.nullableRecordKey };
-  }
-  if (key.type === 'string') {
-    return { kind: 'string', node: key };
-  }
-  if (key.type !== 'enum') {
-    return { kind: 'refused', refusal: refused.recordKey };
-  }
-  return { kind: 'refused', refusal: key.open ? refused.openRecordKey : refused.keyedRecord };
-}
-
-function walkedEntry(key: string, field: Walked<Field>): Walked<[string, Field]> {
+function walkedEntry(
+  key: string,
+  field: Walked<Field, FieldOf<Outline>>,
+): Walked<[string, Field], FieldOf<Outline>> {
   return field.kind === 'walked' ? walked([key, field.value]) : field;
-}
-
-function mergedObjects(left: ObjectNode, right: ObjectNode, at: Reached): Walked {
-  const shared = Object.keys(left.fields).filter((key) => Object.hasOwn(right.fields, key));
-  const differs = shared.some((key) => !isSameField(left.fields[key], right.fields[key]));
-  if (differs) {
-    return notAllowed(at, refused.differingIntersection, { type: 'object' });
-  }
-  const fields = { ...right.fields, ...left.fields };
-  const nullable = left.nullable === true && right.nullable === true;
-  return walked({ type: 'object', fields, ...(nullable && { nullable }) });
-}
-
-/** Two declarations of one field agree on whether it is required and on its shape alone. */
-function isSameField(left: Field | undefined, right: Field | undefined): boolean {
-  if (left === undefined || right === undefined) {
-    return left === right;
-  }
-  return left.required === right.required && shapeKey(left.schema) === shapeKey(right.schema);
 }

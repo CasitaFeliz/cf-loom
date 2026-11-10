@@ -238,75 +238,6 @@ function casesOfGroup(graph: NodelessGraph, group: Group, groups: readonly Group
   return cases;
 }
 
-/**
- * Whether a member holds a member of its group of schemas that failed before it and that it does
- * not enter itself: one entered before it, not its ancestor, that failed on its own or sits below
- * one that did and is not its ancestor, whose failure it meets.
- */
-function meetsFailed(trace: Trace, failed: ReadonlySet<number>, member: number): boolean {
-  const { graph } = trace;
-  const order = (index: number) => trace.entries.findIndex((entry) => entry.index === index);
-  const isBelow = (above: number, under: number) => trace.below.get(above)?.has(under) === true;
-  const walkGroup = cycleOf(graph, allStepsOf, member);
-  const isBefore = (other: number) => order(other) < order(member) && !isBelow(other, member);
-  return allStepsOf(graph, member).some(
-    (to) =>
-      walkGroup.includes(to) &&
-      to !== member &&
-      isBefore(to) &&
-      (failed.has(to) || [...failed].some((other) => isBelow(other, to) && isBefore(other))),
-  );
-}
-
-/**
- * The members of a group of schemas that fail on their own: those that hold, outside the group, a
- * schema that reaches a nodeless group, those with a member below them that fails on its own, and
- * those that hold a member that failed before them.
- */
-function failingOnTheirOwn(
-  graph: NodelessGraph,
-  groups: readonly Group[],
-  walkGroup: readonly number[],
-): ReadonlySet<number> {
-  const trace = traceOf(graph);
-  const failed = new Set<number>();
-  for (let isChanged = true; isChanged; ) {
-    isChanged = false;
-    for (const member of walkGroup.filter((other) => !failed.has(other))) {
-      const isLeaking = allStepsOf(graph, member).some(
-        (to) => !walkGroup.includes(to) && reaches(graph, groups, to),
-      );
-      const hasFailedBelow = [...failed].some((other) => trace.below.get(member)?.has(other));
-      if (isLeaking || hasFailedBelow || meetsFailed(trace, failed, member)) {
-        failed.add(member);
-        isChanged = true;
-      }
-    }
-  }
-  return failed;
-}
-
-/** The cycles among the members of a group of schemas that stand, which the walk judges when the group closes. */
-function standingCyclesOf(
-  graph: NodelessGraph,
-  groups: readonly Group[],
-  group: Group,
-): readonly Group[] {
-  const walkGroup = cycleOf(graph, allStepsOf, group.members[0] ?? 0);
-  const failing = failingOnTheirOwn(graph, groups, walkGroup);
-  const standing = walkGroup.filter((member) => !failing.has(member));
-  const stepsAmongStanding: Steps = (inner, index) =>
-    nodelessStepsOf(inner, index).filter((to) => standing.includes(to));
-  const cycles = new Map<string, Group>();
-  for (const member of standing) {
-    const members = cycleOf(graph, stepsAmongStanding, member);
-    if (members.length > 0) {
-      cycles.set(members.join(), { members });
-    }
-  }
-  return [...cycles.values()];
-}
-
 /** The refusals of a nodeless cycle the walk raised, each as the schema it sits at and where. */
 function toldIn(graph: NodelessGraph) {
   const refusals = refusalsOf(walkOf(graph));
@@ -321,24 +252,21 @@ function toldIn(graph: NodelessGraph) {
   };
 }
 
-/** The cycles the walk is expected to tell of a graph, each as the schema entered first and where. */
+/**
+ * The cycles the walk is expected to tell of a graph, each as the schema entered first and where:
+ * every nodeless group once, whether a member of it failed on its own or not.
+ */
 function expectedToldOf(graph: NodelessGraph): readonly string[] {
-  const groups = nodelessGroupsOf(graph);
   const { entries } = traceOf(graph);
-  const cycles = new Map(
-    groups
-      .flatMap((group) => standingCyclesOf(graph, groups, group))
-      .map((cycle) => [cycle.members.join(), cycle]),
-  );
-  return [...cycles.values()]
-    .map((cycle) => entries.find((entry) => cycle.members.includes(entry.index)))
+  return nodelessGroupsOf(graph)
+    .map((group) => entries.find((entry) => group.members.includes(entry.index)))
     .map((first) => `n${first?.index} at exports.r${first?.declaration}`)
     .sort();
 }
 
 /**
- * What the walk got wrong of a graph: a cycle refused that is no cycle of the standing members,
- * told twice or told away from its first entered member, or one of them left untold.
+ * What the walk got wrong of a graph: a cycle refused that is no nodeless group, told twice or
+ * told away from its first entered member, or one of them left untold.
  */
 function problemsOfTold(graph: NodelessGraph): readonly string[] {
   const { told, others } = toldIn(graph);
@@ -353,17 +281,14 @@ function problemsOfTold(graph: NodelessGraph): readonly string[] {
   return problems;
 }
 
-/** Whether a cycle stands in a group that a failure of its members partly hides. */
+/** Whether a nodeless group sits in a group of schemas that holds a nodeless group of its own to the side, so a failure of the one comes before the judgement of the other. */
 function isPartlyHidden(graph: NodelessGraph): boolean {
   const groups = nodelessGroupsOf(graph);
-  return groups.some(
-    (group) =>
-      !isUnhidden(graph, groups, group) && standingCyclesOf(graph, groups, group).length > 0,
-  );
+  return groups.some((group) => !isUnhidden(graph, groups, group));
 }
 
 describe('walkSchemas: nodeless cycles of random graphs', () => {
-  test('the walk tells each set of standing schemas that lead back to each other once, at its first entered member, and nothing else', () => {
+  test('the walk tells each set of schemas that lead back to each other once, at its first entered member, failing or not, and nothing else', () => {
     const wrong: string[] = [];
 
     for (const [position, graph] of graphs.entries()) {
@@ -376,7 +301,7 @@ describe('walkSchemas: nodeless cycles of random graphs', () => {
     expect(wrong).toEqual([]);
   });
 
-  test('the walk tells the standing schemas of a group a failure partly hides the same', () => {
+  test('the walk tells the schemas of a group a failure partly hides the same', () => {
     const wrong: string[] = [];
     const drawn = Array.from({ length: 40_000 }, (_, index) => ({
       seed: index + 5_001,

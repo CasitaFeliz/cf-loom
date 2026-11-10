@@ -273,7 +273,7 @@ describe('./internal, defGraphOf', () => {
       names: ['constructor', 'toString', '__proto__'],
     },
   ])('a ref to $reaches resolves to nothing, for every name on the way', ({ defs, names }) => {
-    const graph = defGraphOf(defs);
+    const graph = defGraphOf<SchemaNode>(defs);
 
     const resolved = names.map((name) => graph.resolved(ref(name)));
 
@@ -335,7 +335,7 @@ describe('./internal, defGraphOf', () => {
     const high = '\uFFFF';
     const defs = { [high]: aString, [astral]: aString, a: aString };
 
-    const { held } = defGraphOf(defs).reached([ref(high), ref(astral), ref('a')]);
+    const { held } = defGraphOf<SchemaNode>(defs).reached([ref(high), ref(astral), ref('a')]);
 
     expect(Object.keys(held)).toEqual(['a', high, astral]);
   });
@@ -344,7 +344,7 @@ describe('./internal, defGraphOf', () => {
     const defs = { o: { type: 'array', items: ref('toString') } } as const;
     const nodes = [ref('o'), ref('constructor'), ref('__proto__')];
 
-    const { held, unheld } = defGraphOf(defs).reached(nodes);
+    const { held, unheld } = defGraphOf<SchemaNode>(defs).reached(nodes);
 
     expect(Object.keys(held)).toEqual(['o']);
     expect([...unheld].sort()).toEqual(['__proto__', 'constructor', 'toString']);
@@ -393,7 +393,7 @@ describe('./internal, defGraphOf', () => {
       mid: ref('leaf'),
       leaf: { type: 'array', items: ref('top') },
     };
-    const askedOf = (graph: ReturnType<typeof defGraphOf>) => (name: string) => [
+    const askedOf = (graph: DefGraph) => (name: string) => [
       `${name}: ${graph.def(name)?.type}`,
       `${name} resolves to ${graph.resolved(ref(name))?.name}`,
       `${name} reaches ${Object.keys(graph.reached([ref(name)]).held)}`,
@@ -439,7 +439,7 @@ describe('./internal, defGraphOf', () => {
   });
 
   test('an empty Defs, no nodes and a node with no ref reach and resolve nothing', () => {
-    const graph = defGraphOf({});
+    const graph = defGraphOf<SchemaNode>({});
 
     const reachedFromNone = graph.reached([]);
     const reachedFromPlain = graph.reached([aString, anObject]);
@@ -475,7 +475,7 @@ describe('./internal, defGraphOf', () => {
       options: [ref('d0'), ref('d1'), ref('d2'), ref('d3')],
     };
 
-    const { unheld } = defGraphOf(defs).reached([root]);
+    const { unheld } = defGraphOf<SchemaNode>(defs).reached([root]);
 
     expect(unheld).toEqual(['d1', 'd3']);
   });

@@ -679,6 +679,193 @@ describe('validateRoot: a composition reaching an Open Enum through every kind o
   });
 });
 
+const dateRefusal = {
+  kind: 'not-allowed',
+  construct: 'z.date()',
+  instead: 'z.iso.datetime()',
+  alsoIn: [],
+};
+
+describe('validateRoot: an open union or intersection beside a schema that fails', () => {
+  test('a union whose option holds an Open Enum and a date tells both', () => {
+    const body = z.union([z.object({ status: openEnum(['a']) }), z.date()]);
+
+    const validated = validatedWithBody(body);
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        { ...unionRefusal, location: bodyAt },
+        { ...dateRefusal, location: `${bodyAt}<|1>` },
+      ],
+    });
+  });
+
+  test('an intersection that is not of objects, over an item that fails and reaches an Open Enum, tells both', () => {
+    const tree: z.ZodType = z
+      .object({
+        get children() {
+          return z.array(tree);
+        },
+      })
+      .meta({ id: 'tree' });
+    const body = z.intersection(tree, z.object({ status: openEnum(['a']), at: z.date() }));
+
+    const validated = validatedWithBody(body);
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        { ...refusal, location: bodyAt },
+        { ...dateRefusal, location: `${bodyAt}[1].at` },
+      ],
+    });
+  });
+
+  test('a union over a def that holds an Open Enum and fails on its own tells the union and the failure', () => {
+    const tree: z.ZodType = z
+      .object({
+        status: openEnum(['a']),
+        placedAt: z.date(),
+        get children() {
+          return z.array(tree);
+        },
+      })
+      .meta({ id: 'tree' });
+    const body = z.union([tree, z.string()]);
+
+    const validated = validatedWithBody(body);
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        { ...unionRefusal, location: bodyAt },
+        { ...dateRefusal, location: `${bodyAt}<|0>.placedAt` },
+      ],
+    });
+  });
+
+  test('a shared field of an intersection that fails is not kept, so no union reaches the Open Enum in it', () => {
+    const failing = z.object({ a: z.object({ e: openEnum(['a']), d: z.date() }) });
+    const whole = z.object({ a: z.object({ e: openEnum(['a']) }) });
+    const body = z.union([z.intersection(failing, whole), z.boolean()]);
+
+    const validated = validatedWithBody(body);
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [{ ...dateRefusal, location: `${bodyAt}<|0>[0].a.d` }],
+    });
+  });
+
+  test('a tuple whose rest fails and holds an Open Enum is reached by a union', () => {
+    const rest = z.object({ e: openEnum(['a']), placedAt: z.date() });
+    const body = z.union([z.tuple([z.string()], rest), z.boolean()]);
+
+    const validated = validatedWithBody(body);
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        { ...unionRefusal, location: bodyAt },
+        { ...dateRefusal, location: `${bodyAt}<|0>[...].placedAt` },
+      ],
+    });
+  });
+
+  test.each([
+    ['z.set()', z.set(openEnum(['a']))],
+    ['z.function()', z.function({ input: [openEnum(['a'])], output: z.string() })],
+    ['.pipe()', z.string().pipe(openEnum(['a']) as never)],
+    ['.default()', openEnum(['a']).default('a')],
+  ])('a union over %s holding an Open Enum tells only that construct', (construct, option) => {
+    const body = z.union([option, z.boolean()]);
+
+    const validated = validatedWithBody(body);
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [expect.objectContaining({ construct, location: `${bodyAt}<|0>` })],
+    });
+  });
+
+  test.each([
+    ['z.null()', z.null(), 'z.null()'],
+    ['z.undefined()', z.undefined(), 'z.undefined()'],
+    ['z.literal(null)', z.literal(null), 'z.literal(null)'],
+  ])('a union of an object holding an Open Enum and %s tells both', (_name, option, construct) => {
+    const body = z.union([z.object({ status: openEnum(['a']) }), option]);
+
+    const validated = validatedWithBody(body);
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        { ...unionRefusal, location: bodyAt },
+        expect.objectContaining({ construct, location: `${bodyAt}<|1>` }),
+      ],
+    });
+  });
+
+  test('a union of a literal and a refused construct may become an enum, so it tells no intersection line', () => {
+    const lettered = z.union([z.literal('a'), z.date()]);
+    const body = z.intersection(z.object({ status: openEnum(['a']) }), lettered);
+
+    const validated = validatedWithBody(body);
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [{ ...dateRefusal, location: `${bodyAt}[1]<|1>` }],
+    });
+  });
+
+  test('a union of an object that holds an Open Enum and a literal beside a refused construct is still a union', () => {
+    const body = z.union([z.object({ status: openEnum(['a']) }), z.literal('b'), z.date()]);
+
+    const validated = validatedWithBody(body);
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        { ...unionRefusal, location: bodyAt },
+        { ...dateRefusal, location: `${bodyAt}<|2>` },
+      ],
+    });
+  });
+});
+
+describe('validateRoot, many unions over one def that fails on its own', () => {
+  const sizes = { small: 500, large: 4_000 };
+
+  /** The validation of a body of `count` fields, each a union over one def that holds an Open Enum and a date. */
+  function validateFan(count: number) {
+    const failing: z.ZodType = z
+      .object({
+        status: openEnum(['a']),
+        placedAt: z.date(),
+        get next() {
+          return failing.optional();
+        },
+      })
+      .meta({ id: 'failing' });
+    const fields = Array.from({ length: count }, (_, index) => [
+      `field${index}`,
+      z.union([failing, z.boolean()]),
+    ]);
+    const root = aServiceAnswering(z.object(Object.fromEntries(fields)));
+    const rootPackage = aRootPackage(root);
+    return () => validateRoot(root, rootPackage);
+  }
+
+  test('are validated in time that grows with their number, each told beside the one date', () => {
+    const validated = validateFan(sizes.large)();
+    const order = orderOf(validateFan, sizes, orders.linear);
+
+    expect(validated.kind === 'invalid' ? validated.failures.length : 0).toBe(sizes.large + 1);
+    expect(order).toBeLessThan(orders.linear);
+  });
+});
+
 describe('validateRoot, a long chain of ids', () => {
   const sizes = { small: 2_000, large: 16_000 };
 
