@@ -47,8 +47,7 @@ export const redactionMark = '***';
 /**
  * Whether npm could have printed `printed` for the text `known`: npm redacts everything it prints,
  * so each mark stands for any one or more characters it hid. The parts between the marks are
- * found one after the other, each as early as it can be, so a print with many marks is read in
- * time linear in its length.
+ * found one after the other, each as early as it can be.
  */
 export function isPrintOf(printed: string, known: string): boolean {
   const [first = '', ...others] = printed.split(redactionMark);

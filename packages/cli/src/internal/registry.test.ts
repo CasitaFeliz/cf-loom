@@ -2362,7 +2362,7 @@ describe.concurrent('baselineOf and the 404 npm prints', () => {
     expect(asked()).toEqual([]);
   });
 
-  test('a 404 whose last segment holds a hundred marks is judged without trying every way they could hide a name', async ({
+  test('a 404 whose last segment holds a hundred marks and a character the name lacks names no registry', async ({
     lab,
   }) => {
     const packageName = 'a'.repeat(200);
