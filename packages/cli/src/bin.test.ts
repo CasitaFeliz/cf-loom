@@ -3667,6 +3667,20 @@ describe.concurrent('cf-loom check', () => {
     });
   });
 
+  test('check of a first version under workspaces=true prints that the package has no Baseline', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, { ...aRoot(), '.npmrc': 'workspaces=true\n' });
+
+    const { ran, registry } = await checkedAgainst(lab, { project, served: {} });
+
+    expect(ran).toEqual({
+      status: 0,
+      stdout: `${neverPublished(registry)}\nWould publish ${ordersPackage}@1.0.0 (first version)\n`,
+      stderr: '',
+    });
+  });
+
   test('with no Baseline, a Message Version numbered after a gap is refused: check prints it and exits 1', async ({
     lab,
   }) => {
@@ -6633,6 +6647,39 @@ describe.concurrent('cf-loom publish', () => {
       expect(Object.keys(publishedFilesOf(registry)).sort()).toEqual(ownFilesOfDefinitions);
     },
   );
+
+  test('with workspaces=true in the project’s .npmrc, the first publish of a Definitions Package puts the project’s own files', async ({
+    lab,
+  }) => {
+    const files = {
+      ...aBuiltDefinitions({ workspaces: ['workspaces/*'] }),
+      '.npmrc': 'workspaces=true\n',
+      'workspaces/other/package.json': JSON.stringify({ name: 'other', version: '2.0.0' }),
+      'workspaces/other/index.js': 'export {};\n',
+    };
+    const project = await aGeneratedProject(lab, files);
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(Object.keys(publishedFilesOf(registry)).sort()).toEqual(ownFilesOfDefinitions);
+  });
+
+  test('with NPM_CONFIG_WORKSPACES=true in the environment, a first publish puts the package', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aBuiltDefinitions());
+    const registry = await lab.aRegistry({});
+    const environment = lab.anNpmEnvironment({ userConfig: loginTo(registry) });
+    const env = { ...environment, ...Object.fromEntries([['NPM_CONFIG_WORKSPACES', 'true']]) };
+
+    const ran = await cfLoomWith(project, env, 'publish');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(putsOf(registry)).toEqual([
+      { name: '@org/definitions', version: '1.0.0', distTags: { latest: '1.0.0' } },
+    ]);
+  });
 
   test('a Definitions Package declares the CLI’s peers, whichever zod is installed beside it', async ({
     lab,
