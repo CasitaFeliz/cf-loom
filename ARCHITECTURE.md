@@ -27,6 +27,18 @@ Every package under `packages/` lays out its `src/` the same way; a Service or a
 
 `scripts/check-layout.ts`, run by `pnpm check` and CI, enforces the rules marked (check); the direction of dependencies stays a review rule.
 
+## Tested releases
+
+A range cf-loom promises for an outside tool (npm, Node, TypeScript) is the releases CI runs it on: each tested release, widened to the releases the tool's maintainers call compatible with it, a caret for npm and Node, which follow semver, and a tilde for TypeScript, whose minors may break, joined by ` || ` in ascending numeric order of the releases. It is declared where the tool reads it, if it reads one, and quoted in backticks by the README that promises it:
+
+| Tool | Tested releases | Declared in | Quoted in |
+| --- | --- | --- | --- |
+| Node | the `node` list of every leg of [`.github/workflows/ci.yml`](.github/workflows/ci.yml), each class of legs running on each release; `.node-version`, the Node the repository develops, builds and releases with, is one of them | `engines.node` of every package | [README.md](README.md#set-up) |
+| npm | the `npm` list of the `cli-npm` job | `engines.npm` of `@cf-loom/cli` | [the CLI README](packages/cli/README.md#configuration) |
+| TypeScript | the catalog's `typescript`, one exact release | nowhere: no package reads it | [README.md](README.md#set-up) |
+
+`scripts/tested-releases.test.ts` compares them over every package, so adding or dropping a release changes the matrix, the declarations and the READMEs together, and a bump of the catalog's TypeScript moves the README's promise with it.
+
 ## Where Contracts live
 
 - One Contract per package. Each Service and each Application keeps its Contract as plain source under `src/contract/` of its own package, whose root holds its package.json, and publishes it from there; that package may be a repository of its own (recommended) or one package of a monorepo. The Contract's files should import only each other, `zod`, `@cf-loom/contract`, Definitions Packages and the Contract Packages whose Elements it uses, so it builds and publishes on its own; cf-loom does not enforce it, and a Contract file that imports the Service's code runs that code on every cf-loom command. The CLI loads them and `cf-loom.config.ts` with Node's own type stripping, recording with a resolve hook which package each import resolved to, so they are erasable TypeScript whose relative imports name the `.ts` file (`./get-order.endpoint.ts`), in a package whose package.json has `"type": "module"`.

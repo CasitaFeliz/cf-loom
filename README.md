@@ -85,8 +85,9 @@ The examples in the package READMEs are files that `scripts/readme-service/` com
 A Service, an Application and a Definitions Package are each a package of their own, whose `package.json` has:
 
 - `"type": "module"`: every `cf-loom` command but `--help`, `help` and `--version` exits 3 without it, since the CLI loads the Contract's files and `cf-loom.config.ts` as ES modules (see [Where Contracts live](ARCHITECTURE.md#where-contracts-live));
-- a `name`, usually scoped, such as `@org/orders-service`: the Contract of a Service or an Application is named after it without the scope, and that name must be kebab-case of at most 64 characters, and its Contract Package is `@org/contract-orders-service`;
-- `"engines": { "node": ">=24" }`, the Node every cf-loom package requires.
+- a `name`, usually scoped, such as `@org/orders-service`: the Contract of a Service or an Application is named after it without the scope, and that name must be kebab-case of at most 64 characters, and its Contract Package is `@org/contract-orders-service`.
+
+cf-loom's packages run on a Node in `^24.16.0 || ^26.13.0`, the releases its tests run on, as their `engines` declare (npm warns when another Node installs them, and refuses under `engine-strict`); whether a Service declares `engines` is its own choice.
 
 `zod` and `@cf-loom/contract` are peers of every cf-loom package, and so is each cf-loom package another one uses, so install every one of these that applies:
 
@@ -102,7 +103,7 @@ A Service, an Application and a Definitions Package are each a package of their 
 | Tests of a Consumer | `@cf-loom/testing` as a devDependency |
 | A Definitions Package | `@cf-loom/contract` and `zod` as `peerDependencies` too (see [Definitions Packages](packages/contract/README.md#definitions-packages)) |
 
-Use TypeScript 7, the version cf-loom is built and tested with; 5.x does not type-check a Message Handler. `publish` builds a Service's Contract Package with the `tsc` of the `typescript` installed in the project. Relative imports name the `.ts` file, which `tsc` accepts only with `allowImportingTsExtensions` (it reports TS5097 on each import otherwise), and a Service needs `@types/node` named in `types`, which defaults to none. `init` writes no `tsconfig.json`; this one type-checks a Service that Node runs from source:
+Use TypeScript `~7.0.2`, the release cf-loom is built and tested with. `publish` builds a Service's Contract Package with the `tsc` of the `typescript` installed in the project. Relative imports name the `.ts` file, which `tsc` accepts only with `allowImportingTsExtensions` (it reports TS5097 on each import otherwise), and a Service needs `@types/node` named in `types`, which defaults to none. `init` writes no `tsconfig.json`; this one type-checks a Service that Node runs from source:
 
 ```json
 {
