@@ -1,10 +1,12 @@
-import { packageNamePartsOf } from '@cf-loom/contract/internal';
 import { type Failed, failed, lineOf } from '../child-process/index.ts';
-import { jsonFromNpm, type NpmPlace, textFromNpm, userName } from './npm.ts';
+import { jsonFromNpm, type NpmPlace, userName } from './npm.ts';
+import { viewLabelOf } from './package-versions.ts';
 
 const registrySetting = 'npm_config_registry';
+const getMarker = ' - GET ';
+const passwordRedacted = /^[a-z][a-z0-9+.-]*:\/\/[^/?#]*:\*\*\*@/i;
 const credentialsInUrl =
-  'npm will not print a registry URL that holds credentials: put them in a //host/:_authToken or //host/:_auth line instead of in the registry URL';
+  'npm redacts a registry URL that holds credentials: put them in a //host/:_authToken or //host/:_auth line instead of in the registry URL';
 
 /** A package the registry npm reads it from does not know, found with the user npm logs in as there. */
 export type UnknownPackage = {
@@ -13,11 +15,7 @@ export type UnknownPackage = {
   readonly username: string;
 };
 
-type Registry = { readonly kind: 'registry'; readonly registry: string };
-
-type Unset = { readonly kind: 'unset' };
-
-const unset: Unset = { kind: 'unset' };
+type Named = { readonly kind: 'registry'; readonly registry: string } | Failed;
 
 type Login =
   | { readonly kind: 'user'; readonly username: string }
@@ -25,19 +23,20 @@ type Login =
 
 /**
  * Settles what npm's 404 for a package means: a package never published only when npm has a login
- * on the registry that serves the package; without one, a package the login cannot read looks the
- * same, so the read fails.
+ * on the registry that answered the 404, which the 404 names; without one, a package the login
+ * cannot read looks the same, so the read fails.
  */
 export async function unknownPackageOf(
   npm: NpmPlace,
   packageName: string,
+  notFound: string,
 ): Promise<UnknownPackage | Failed> {
-  const served = await registryOf(npm, packageName);
-  if (served.kind === 'failed') {
-    return served;
+  const named = registryNamedBy(packageName, notFound);
+  if (named.kind === 'failed') {
+    return named;
   }
-  const login = await loginOn(npm, served.registry);
-  const registry = lineOf(served.registry);
+  const login = await loginOn(npm, named.registry);
+  const registry = lineOf(named.registry);
   if (login.kind === 'refused') {
     const refusal = `npm has no login there it accepts (${login.why})`;
     const looksUnpublished = 'a package your login cannot read looks unpublished';
@@ -47,35 +46,43 @@ export async function unknownPackageOf(
 }
 
 /**
- * The package's scope's own registry, or else the default one; each asked alone, since npm
- * refuses one that holds credentials.
+ * The registry whose URL follows the first ` - GET ` of npm's 404 summary: the URL without its
+ * last path segment, which must be the package's name. A URL npm redacted names no registry that
+ * `npm whoami` can be pointed at.
  */
-async function registryOf(npm: NpmPlace, packageName: string): Promise<Registry | Failed> {
-  const { scope } = packageNamePartsOf(packageName);
-  const scoped = scope === undefined ? unset : await registryAt(npm, `${scope}:registry`);
-  if (scoped.kind !== 'unset') {
-    return scoped;
+function registryNamedBy(packageName: string, notFound: string): Named {
+  const label = viewLabelOf(packageName);
+  const url = urlAfterGet(notFound);
+  if (url !== undefined && passwordRedacted.test(url)) {
+    return failed(`${label} failed: ${credentialsInUrl}`);
   }
-  const standard = await registryAt(npm, 'registry');
-  return standard.kind === 'unset'
-    ? failed(`npm did not say which registry serves ${packageName}`)
-    : standard;
-}
-
-async function registryAt(npm: NpmPlace, key: string): Promise<Registry | Unset | Failed> {
-  const call = { label: `npm config get ${key}`, args: ['config', 'get', key] };
-  const run = await textFromNpm(npm, call);
-  if (run.kind === 'failed') {
-    return isProtected(run.message) ? failed(`${call.label} failed: ${credentialsInUrl}`) : run;
-  }
-  const registry = run.text.trim();
-  return registry === '' || registry === 'undefined'
-    ? { kind: 'unset' }
+  const registry = url === undefined ? undefined : registryOfUrl(url, packageName);
+  return registry === undefined
+    ? failed(`${label}'s 404 names no registry: ${lineOf(notFound)}`)
     : { kind: 'registry', registry };
 }
 
-function isProtected(npmFailure: string): boolean {
-  return npmFailure.includes('is protected');
+function urlAfterGet(notFound: string): string | undefined {
+  const start = notFound.indexOf(getMarker);
+  if (start === -1) {
+    return undefined;
+  }
+  const url = notFound.slice(start + getMarker.length);
+  const end = url.search(/\s/);
+  return end === -1 ? url : url.slice(0, end);
+}
+
+function registryOfUrl(url: string, packageName: string): string | undefined {
+  const cut = url.lastIndexOf('/') + 1;
+  return decodedOf(url.slice(cut)) === packageName ? url.slice(0, cut) : undefined;
+}
+
+function decodedOf(segment: string): string | undefined {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return undefined;
+  }
 }
 
 async function loginOn(npm: NpmPlace, registry: string): Promise<Login> {

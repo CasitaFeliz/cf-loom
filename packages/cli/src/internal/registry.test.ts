@@ -74,7 +74,7 @@ const pathNotPlainAscii = 'has a path that is not printable ASCII, or that holds
 const paxBeyondAscii = 'has a pax header with a byte beyond ASCII';
 const folderNamedSnapshot = 'has a folder named snapshot.json';
 const credentialsInUrl =
-  'npm will not print a registry URL that holds credentials: put them in a //host/:_authToken or //host/:_auth line instead of in the registry URL';
+  'npm redacts a registry URL that holds credentials: put them in a //host/:_authToken or //host/:_auth line instead of in the registry URL';
 
 /** npm strips a path's first folder, so it can be as long as a test needs and still name snapshot.json. */
 const longFirstFolder = 'p'.repeat(1_048_548);
@@ -117,6 +117,25 @@ const workspacesSettings: readonly (readonly [string, (login: string) => Arrange
     (login) => ({ options: { userConfig: login }, env: [['npm_config_workspaces', 'true']] }),
   ],
 ];
+
+/** A member of an npm workspaces root, whose `.npmrc` is `rootConfig`, and the `.npmrc` of its own, if any. */
+function aWorkspaceMember(
+  lab: Lab,
+  { rootConfig, memberConfig }: { readonly rootConfig: string; readonly memberConfig?: string },
+) {
+  const root = lab.aPlace({ projectConfig: rootConfig });
+  writeFileSync(
+    join(root.directory, 'package.json'),
+    '{"name":"root","version":"0.0.0","private":true,"workspaces":["workspaces/*"]}',
+  );
+  const directory = join(root.directory, 'workspaces', 'a');
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(join(directory, 'package.json'), '{"name":"a","version":"0.0.0"}');
+  if (memberConfig !== undefined) {
+    writeFileSync(join(directory, '.npmrc'), memberConfig);
+  }
+  return { ...root, directory };
+}
 
 async function readOrders(lab: Lab, served: RegistryOptions) {
   const registry = await lab.aRegistry(served);
@@ -452,7 +471,7 @@ describe.concurrent('baselineOf', () => {
 
     const calls = recording.calls();
     const secrets = [token, registry.host, '--registry'];
-    expect(calls).toHaveLength(6);
+    expect(calls).toHaveLength(5);
     expect(calls.filter((call) => secrets.some((secret) => call.includes(secret)))).toEqual([]);
   });
 
@@ -501,6 +520,45 @@ describe.concurrent('baselineOf', () => {
       });
     },
   );
+
+  test('in a workspace member with no .npmrc of its own, the 404 is settled on the root’s registry with the root’s login', async ({
+    lab,
+  }) => {
+    const registry = await lab.aRegistry();
+    const npm = aWorkspaceMember(lab, { rootConfig: loginTo(registry) });
+
+    const read = await baselineOf(npm, {
+      packageName: ordersPackage,
+      declared: orders,
+      against: undefined,
+    });
+
+    expect(read).toMatchObject({
+      baseline: { kind: 'unknown-package', registry: `${registry.url}/`, username: 'tester' },
+    });
+  });
+
+  test('in a workspace member with its own .npmrc, the 404 is settled on the root’s registry, and the member’s gets no request', async ({
+    lab,
+  }) => {
+    const rootRegistry = await lab.aRegistry();
+    const memberRegistry = await lab.aRegistry();
+    const npm = aWorkspaceMember(lab, {
+      rootConfig: loginTo(rootRegistry),
+      memberConfig: loginTo(memberRegistry),
+    });
+
+    const read = await baselineOf(npm, {
+      packageName: ordersPackage,
+      declared: orders,
+      against: undefined,
+    });
+
+    expect(read).toMatchObject({
+      baseline: { kind: 'unknown-package', registry: `${rootRegistry.url}/`, username: 'tester' },
+    });
+    expect(memberRegistry.requests).toEqual([]);
+  });
 
   test('whoami asks the registry npm reads the scope from, not the default registry', async ({
     lab,
@@ -569,7 +627,7 @@ describe.concurrent('baselineOf', () => {
       against: undefined,
     });
 
-    expect(failureIn(read)).toBe(`npm config get registry failed: ${credentialsInUrl}`);
+    expect(failureIn(read)).toBe(`npm view ${ordersPackage} failed: ${credentialsInUrl}`);
   });
 
   test.for([
@@ -588,7 +646,7 @@ describe.concurrent('baselineOf', () => {
         against: undefined,
       });
 
-      expect(failureIn(read)).toBe(`npm config get ${key} failed: ${credentialsInUrl}`);
+      expect(failureIn(read)).toBe(`npm view ${ordersPackage} failed: ${credentialsInUrl}`);
     },
   );
 

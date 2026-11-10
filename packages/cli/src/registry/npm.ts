@@ -9,7 +9,7 @@ import {
   ranChild,
 } from '../child-process/index.ts';
 
-/** Where npm runs: the project's directory, whose `.npmrc` npm reads, and the environment the organization's npm login lives in. */
+/** Where npm runs: the project's directory, where npm reads its configuration as for any command run there, a workspaces root's included, and the environment the organization's npm login lives in. */
 export type NpmPlace = {
   readonly directory: string;
   readonly env: Readonly<Record<string, string | undefined>>;
@@ -22,11 +22,12 @@ export type NpmCall = {
   readonly env?: Readonly<Record<string, string>>;
 };
 
-/** npm's own refusal, from the `{ error }` it prints with `--json`. */
+/** npm's own refusal, from the `{ error }` it prints with `--json`; `printed` is its summary's first line as npm printed it, with the credentials of a URL in it, which `summary` leaves out. */
 export type Refused = {
   readonly kind: 'refused';
   readonly code: string;
   readonly summary: string;
+  readonly printed: string;
   readonly message: string;
 };
 
@@ -46,9 +47,6 @@ export type PrintedObject = Readonly<Record<string, unknown>>;
 /** What npm printed as JSON, read as the shape its call expects, or why it was not. */
 export type NpmJson<Value> = { readonly kind: 'json'; readonly value: Value } | Refused | Failed;
 
-/** What npm printed as text, or why it did not. */
-export type NpmText = { readonly kind: 'text'; readonly text: string } | Failed;
-
 /**
  * Runs the npm on the place's PATH, with no shell, and reads its JSON as the shape given: a print
  * that is not that shape fails with the call, what it printed and what the shape expects.
@@ -66,19 +64,6 @@ export async function jsonFromNpm<Value>(
       return refusalOf(call, ended);
     case 'exited':
       return shapedOf(call, shape, jsonOf(call, ended.stdout));
-  }
-}
-
-/** Runs the npm on the place's PATH, with no shell, and reads its text. */
-export async function textFromNpm(place: NpmPlace, call: NpmCall): Promise<NpmText> {
-  const ended = await endedOf(place, call);
-  switch (ended.kind) {
-    case 'failed':
-      return ended;
-    case 'errored':
-      return failed(refusalOf(call, ended).message);
-    case 'exited':
-      return { kind: 'text', text: ended.stdout };
   }
 }
 
@@ -200,7 +185,13 @@ function refusalOf(call: NpmCall, ended: Extract<ChildRan, { kind: 'errored' }>)
   }
   const { code, summary } = error;
   const message = lineOf(`${call.label} failed (${code}: ${summary})`);
-  return { kind: 'refused', code: lineOf(code), summary: lineOf(summary), message };
+  return {
+    kind: 'refused',
+    code: lineOf(code),
+    summary: lineOf(summary),
+    printed: summary,
+    message,
+  };
 }
 
 function errorOf(printed: unknown): { code: string; summary: string } | undefined {
