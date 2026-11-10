@@ -1,0 +1,21 @@
+language js
+
+or {
+  JsImport(),
+  JsExportFromClause(),
+  JsExportNamedFromClause(),
+  JsCallExpression(callee=`require`),
+  JsImportCallExpression()
+} as $use where {
+  $use <: contains or {
+    `"node:child_process"`,
+    `"child_process"`
+  },
+  $filename <: or {
+    r".*\.test\.ts",
+    r".*/test/.*\.ts"
+  },
+  $filename <: not r".*/packages/messaging/test/test-process\.ts",
+  $filename <: not r".*/packages/cli/.*",
+  register_diagnostic(span=$use, message="C30: a test runs a program through runProcess from packages/messaging/test/test-process.ts, which its test or hook owns and bounds; it never imports node:child_process.", severity="error")
+}

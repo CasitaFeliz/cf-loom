@@ -460,4 +460,75 @@ describe('lint plugins', () => {
     expect(pluginReportsFor(lines, 'packages/client/src/probe.test.ts')).toEqual([]);
     expect(pluginReportsFor(lines, 'packages/contract/src/lines/line.ts')).toEqual([]);
   });
+
+  it('report an import, a type import, a require and an import() of node:child_process in a test file and in a file under test/, each form and both module names (C30)', () => {
+    const lines = [
+      "import { spawnSync } from 'node:child_process';",
+      "import type { ChildProcess } from 'node:child_process';",
+      "import * as everything from 'node:child_process';",
+      "import { execFile } from 'child_process';",
+      "import 'node:child_process';",
+      "export const lazily = await import('node:child_process');",
+      "export const required = require('node:child_process');",
+      "export const lazilyBare = await import('child_process');",
+      "export const requiredBare = require('child_process');",
+      'export const used = [spawnSync, everything, execFile];',
+    ];
+    const expected = [
+      'C30@1',
+      'C30@2',
+      'C30@3',
+      'C30@4',
+      'C30@5',
+      'C30@6',
+      'C30@7',
+      'C30@8',
+      'C30@9',
+    ];
+
+    expect(pluginReportsFor(lines, 'probe.test.ts')).toEqual(expected);
+    expect(pluginReportsFor(lines, 'packages/server/test/probe.ts')).toEqual(expected);
+    expect(pluginReportsFor(lines, 'examples/billing-service/test/probe.ts')).toEqual(expected);
+  });
+
+  it('report a re-export from node:child_process in a file under test/, each form (C30)', () => {
+    const lines = [
+      "export { spawn } from 'node:child_process';",
+      "export { exec as run } from 'child_process';",
+      "export * as processes from 'node:child_process';",
+      "export * from 'node:child_process';",
+      "export type { ChildProcess } from 'node:child_process';",
+    ];
+
+    expect(pluginReportsFor(lines, 'packages/server/test/probe.ts')).toEqual([
+      'C30@1',
+      'C30@2',
+      'C30@3',
+      'C30@4',
+      'C30@5',
+    ]);
+  });
+
+  it('do not report node:child_process in test-process.ts, a file under src/, a test file under packages/cli/, or a string or a module that only resembles it (C30)', () => {
+    const imported = [
+      "import { spawn } from 'node:child_process';",
+      "export { spawn as run } from 'node:child_process';",
+      'export const used = spawn;',
+    ];
+    const resembling = [
+      "export const name = 'node:child_process';",
+      "export const names = ['child_process', `node:child_process`];",
+      "export const logged = String('node:child_process');",
+      "export { lookalike } from 'node:child_processes';",
+      "export { local } from './child_process.ts';",
+    ];
+
+    expect(pluginReportsFor(imported, 'packages/messaging/test/test-process.ts')).toEqual([]);
+    expect(pluginReportsFor(imported, 'packages/messaging/src/probe.ts')).toEqual([]);
+    expect(pluginReportsFor(imported, 'scripts/probe.ts')).toEqual([]);
+    expect(pluginReportsFor(imported, 'packages/cli/src/probe.test.ts')).toEqual([]);
+    expect(pluginReportsFor(imported, 'packages/cli/test/probe.ts')).toEqual([]);
+    expect(pluginReportsFor(resembling, 'probe.test.ts')).toEqual([]);
+    expect(pluginReportsFor(resembling, 'packages/server/test/probe.ts')).toEqual([]);
+  });
 });
