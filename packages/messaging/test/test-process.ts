@@ -163,7 +163,7 @@ export async function runProcess(
   args: readonly string[],
   running: Running = {},
 ): Promise<Ran> {
-  const commandLine = [command, ...args].join(' ');
+  const commandLine = commandLineOf(command, args);
   const server = ownedProcess(command, args, running);
   const stdout = chunksOf(server.child.stdout);
   const stderr = chunksOf(server.child.stderr);
@@ -177,6 +177,27 @@ export async function runProcess(
   } finally {
     unfinished.delete(server);
   }
+}
+
+function commandLineOf(command: string, args: readonly string[]): string {
+  return [command, ...args].join(' ');
+}
+
+/**
+ * Runs `command` as `runProcess` does, for the stdout it prints when it exits with status 0; it rejects, naming the
+ * command line, the status and its stderr, when it exits with another.
+ */
+export async function runForOutput(
+  command: string,
+  args: readonly string[],
+  running: Running = {},
+): Promise<string> {
+  const ran = await runProcess(command, args, running);
+  if (ran.status !== 0) {
+    const commandLine = commandLineOf(command, args);
+    throw new Error(`${commandLine} ended with status ${ran.status}: ${ran.stderr}`);
+  }
+  return ran.stdout;
 }
 
 /** Collects `stream`, which decodes its chunks as UTF-8 across their edges, whole. */

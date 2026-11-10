@@ -4,7 +4,13 @@ import { createRequire } from 'node:module';
 import { delimiter, dirname, join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { describe, expect, test } from 'vitest';
-import { aTemporaryDirectory, runProcess, startProcess, type TestProcess } from './test-process.ts';
+import {
+  aTemporaryDirectory,
+  runForOutput,
+  runProcess,
+  startProcess,
+  type TestProcess,
+} from './test-process.ts';
 
 const fixtures = join(import.meta.dirname, 'test-processes');
 const vitestCli = join(
@@ -240,6 +246,24 @@ describe('a run a test makes through test-process.ts', () => {
     const ran = await runProcess(process.execPath, ['-e', script], { input: 'asked' });
 
     expect(ran.stdout).toBe('asked');
+  });
+
+  test('a run that must succeed gives its stdout when it exits with 0', async () => {
+    const stdout = await runForOutput(process.execPath, ['-e', "process.stdout.write('printed')"]);
+
+    expect(stdout).toBe('printed');
+  });
+
+  test('a run that must succeed rejects, naming its command line, the status and its stderr, when it exits with another status', async () => {
+    const script = "process.stderr.write('refused'); process.exitCode = 3";
+
+    const failure = await runForOutput(process.execPath, ['-e', script]).catch(
+      (error: unknown) => error,
+    );
+
+    expect(failure).toEqual(
+      new Error(`${process.execPath} -e ${script} ended with status 3: refused`),
+    );
   });
 });
 
