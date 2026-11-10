@@ -575,4 +575,18 @@ describe('lint plugins', () => {
     expect(await pluginReportsFor(resembling, 'probe.test.ts')).toEqual([]);
     expect(await pluginReportsFor(resembling, 'packages/server/test/probe.ts')).toEqual([]);
   });
+
+  it('do not report node:child_process in a file of the repository outside its tests when a test folder lies above the repository, but report it in a test of the repository (C30)', async () => {
+    const lines = ["import { spawn } from 'node:child_process';", 'export const used = spawn;'];
+
+    expect(await pluginReportsFor(lines, 'test/checkout/scripts/probe.ts')).toEqual([]);
+    expect(await pluginReportsFor(lines, 'test/checkout/packages/server/src/probe.ts')).toEqual([]);
+    expect(await pluginReportsFor(lines, 'test/checkout/packages/server/test/probe.ts')).toEqual([
+      'C30@1',
+    ]);
+    expect(
+      await pluginReportsFor(lines, 'test/checkout/scripts/readme-service/test/probe.ts'),
+    ).toEqual(['C30@1']);
+    expect(await pluginReportsFor(lines, 'test/checkout/scripts/probe.test.ts')).toEqual(['C30@1']);
+  });
 });

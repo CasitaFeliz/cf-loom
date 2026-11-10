@@ -17,7 +17,7 @@ or {
   },
   $filename <: or {
     r".*\.test\.ts",
-    r".*/test/.*\.ts"
+    r".*/(?:(?:packages|examples)/[^/]+|scripts/readme-service)/test/.*\.ts"
   },
   $filename <: not r".*/packages/messaging/test/test-process\.ts",
   $filename <: not r".*/packages/cli/.*",
