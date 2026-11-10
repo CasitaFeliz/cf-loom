@@ -6953,8 +6953,9 @@ describe.concurrent('cf-loom publish', () => {
     const project = await aGeneratedProject(lab, aBuiltDefinitions({ packageExtensions }));
     const before = read(project, 'package.json');
 
-    await publishedAgainst(lab, { project, served: {} });
+    const { ran } = await publishedAgainst(lab, { project, served: {} });
 
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
     expect(read(project, 'package.json')).toBe(before);
     expect(JSON.parse(before).packageExtensions).toEqual(packageExtensions);
   });
