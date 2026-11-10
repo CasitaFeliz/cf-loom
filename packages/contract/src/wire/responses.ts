@@ -1,5 +1,5 @@
 import type { ReservedCode } from '../declarations/index.ts';
-import { joinedOf, unbrokenLineOf } from '../lines/index.ts';
+import { dottedPathOf, joinedOf, unbrokenLineOf } from '../lines/index.ts';
 import { writtenTextOf } from '../written/index.ts';
 import { jsonContentType } from './content-type.ts';
 import {
@@ -140,7 +140,7 @@ function sentHeaderTextsOf(
   const headers = headerTextsOf(part, sent);
   if (headers.kind === 'issues') {
     const names = joinedOf(
-      headers.issues.map(({ path }) => path.join('.')),
+      headers.issues.map(({ path }) => dottedPathOf(path)),
       'and',
     );
     throw new Error(

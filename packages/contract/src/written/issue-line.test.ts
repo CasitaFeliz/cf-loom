@@ -39,6 +39,14 @@ describe('issueLineOf', () => {
     expect(line).toBe('orders: body.orderId invalid_format: Invalid UUID');
   });
 
+  test('an Issue whose path holds a key with a dot or a space writes it as one key', () => {
+    const issue = anIssue({ path: ['items', 0, 'a.b', 'c d'] });
+
+    const line = issueLineOf('serve', issue);
+
+    expect(line).toBe('serve: body.items.0."a.b"."c d" invalid_type: Expected string');
+  });
+
   test('an Issue at the part itself is written with no path', () => {
     const issue = { part: 'body', path: [], code: 'required', message: 'Required' } as const;
 
@@ -132,8 +140,8 @@ describe('listedIssueLinesOf: the size', () => {
     expect(counted).toEqual([linesOf([fits]), [`${source}: 1 more Issue`]]);
   });
 
-  test('the size counts a line as written: a line break in a key takes the two characters of its escape', () => {
-    const fixed = Buffer.byteLength(`${source}: body.a\\nb invalid_type: `) + 1;
+  test('the size counts a line as written: a line break in a key takes the two characters of its escape, and the key its quotes', () => {
+    const fixed = Buffer.byteLength(`${source}: body."a\\nb" invalid_type: `) + 1;
     const fits = anIssue({ path: ['a\nb'], message: 'k'.repeat(65_536 - fixed) });
     const passes = anIssue({ path: ['a\nb'], message: 'k'.repeat(65_537 - fixed) });
 
@@ -147,13 +155,15 @@ describe('listedIssueLinesOf: the size', () => {
 
 describe('listedIssueLinesOf: a line stays a line', () => {
   test.for(lineBreaks)(
-    'a key holding %s is listed on one line, as the visible text of its escape',
+    'a key holding %s is listed on one line, quoted, with the visible text of its escape',
     ([, code, visible]) => {
-      const issue = anIssue({ path: [`a${String.fromCharCode(code)}b`] });
+      const character = String.fromCharCode(code);
+      const issue = anIssue({ path: [`a${character}b`] });
 
       const lines = listedIssueLinesOf(source, [issue]);
 
-      expect(lines).toEqual([`${source}: body.a${visible}b invalid_type: Expected string`]);
+      const key = JSON.stringify(`a${character}b`).replaceAll(character, visible);
+      expect(lines).toEqual([`${source}: body.${key} invalid_type: Expected string`]);
       expect(lineBreaksIn(lines.join(''))).toBe(0);
     },
   );

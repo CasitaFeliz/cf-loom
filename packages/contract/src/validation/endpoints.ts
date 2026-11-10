@@ -9,7 +9,7 @@ import {
   successStatuses,
   visibilities,
 } from '../declarations/index.ts';
-import { joinedOf } from '../lines/index.ts';
+import { joinedOf, wordOf } from '../lines/index.ts';
 import { inFields } from '../walker/index.ts';
 import {
   isMissing,
@@ -86,7 +86,10 @@ function successFailures({ at, endpoint }: LocatedEndpoint): readonly Declaratio
     return [];
   }
   if (!successStatuses.includes(success.status)) {
-    const statuses = joinedOf(successStatuses.map(String), 'or');
+    const statuses = joinedOf(
+      successStatuses.map((status) => wordOf(String(status))),
+      'or',
+    );
     const message = `A Success status is ${statuses}: ${writtenTextOf(success.status)}`;
     return [failure(inFields(at, 'success', 'status'), 'success-status', message)];
   }

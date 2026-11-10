@@ -88,7 +88,7 @@ describe('validateRoot: a code is declared once', () => {
   ])('two Rejections with one code, %s, fail code-once', (_, first, second) => {
     const root = aService([{ rejections: [first] }, { rejections: [second] }]);
 
-    expect(failuresOf(root)).toEqual([codeOnce('LOCKED', 'the Contract, twice')]);
+    expect(failuresOf(root)).toEqual([codeOnce('LOCKED', 'the Contract twice')]);
   });
 
   test('one Rejection an Endpoint and its Guard both list is one declaration', () => {
@@ -204,9 +204,45 @@ describe('validateRoot: a code is declared once', () => {
     expect(failures).toEqual([
       codeOnce(
         'NOT_FOUND',
-        'the Contract, twice, @org/one@1.0.0 and the notFound Standard Rejection',
+        'the Contract twice, @org/one@1.0.0 and the notFound Standard Rejection',
       ),
     ]);
+  });
+
+  test('a package whose name and version hold a comma and a closing word is one quoted item of the list', () => {
+    const declared = (message: string) =>
+      defineRejection({ code: 'NOT_FOUND', status: 404, message });
+    const installed = declared('Installed');
+    const packages = [
+      anInstalledPackage(
+        defineDefinitions({}),
+        { installed },
+        { packageName: '@org/one, @org/two', version: '1.0.0 and 2.0.0' },
+      ),
+    ];
+    const endpoints = [declared('First'), installed].map((rejection) => ({
+      rejections: [rejection],
+    }));
+
+    const failures = failuresOf(aService(endpoints), packages);
+
+    expect(failures).toEqual([
+      codeOnce(
+        'NOT_FOUND',
+        'the Contract, "@org/one, @org/two@1.0.0 and 2.0.0" and the notFound Standard Rejection',
+      ),
+    ]);
+  });
+
+  test('a source that declared a code three times is written with its count after it', () => {
+    const declared = (message: string) => defineRejection({ code: 'LOCKED', status: 409, message });
+    const endpoints = ['One', 'Two', 'Three'].map((message) => ({
+      rejections: [declared(message)],
+    }));
+
+    const failures = failuresOf(aService(endpoints));
+
+    expect(failures).toEqual([codeOnce('LOCKED', 'the Contract 3 times')]);
   });
 
   test('two Standard Rejections resolving to one code fail code-once', () => {
@@ -238,7 +274,7 @@ describe('validateRoot: a code is declared once', () => {
 
     expect(validated).toEqual({
       kind: 'invalid',
-      failures: [codeOnce('LOCKED', 'the Definitions Package, twice')],
+      failures: [codeOnce('LOCKED', 'the Definitions Package twice')],
     });
   });
 

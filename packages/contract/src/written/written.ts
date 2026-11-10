@@ -1,3 +1,5 @@
+import type { Token } from '../lines/index.ts';
+
 /** A plain object an author wrote: not a list, not `null`, with no prototype but Object's or none. */
 export type WrittenObject = Readonly<Record<string, unknown>>;
 
@@ -104,8 +106,8 @@ export function textOf(value: unknown): string {
  * A written value as a message echoes it: a string JSON-quoted, so its spaces and line breaks
  * show and `"409"` is told from `409`, anything else in `textOf`'s words.
  */
-export function writtenTextOf(value: unknown): string {
-  return typeof value === 'string' ? JSON.stringify(value) : textOf(value);
+export function writtenTextOf(value: unknown): Token {
+  return (typeof value === 'string' ? JSON.stringify(value) : textOf(value)) as Token;
 }
 
 /** Whether a list field lists nothing: left out or an empty list; anything else is the structure rule's. */

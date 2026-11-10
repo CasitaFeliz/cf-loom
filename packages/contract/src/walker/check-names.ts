@@ -170,12 +170,15 @@ function stringFormatName(check: Extract<CheckDef, { readonly check: 'string_for
  * A format zod builds from a regex and checks through a function, named by every spelling that
  * builds it: the same regex in `.regex()` is a check zod runs from data.
  */
-export function refusedRegexBuiltFormat(format: string, built: RegexBuiltFormat): Refused {
-  const spellings = [...built.calls.map(callOf), refusedStringFormat(format).construct];
-  return { construct: joinedOf(spellings, 'or'), instead: `.regex(z.regexes.${built.regexName})` };
+export function refusedRegexBuiltFormat({ format, calls, regexName }: RegexBuiltFormat): Refused {
+  const stringFormat = `z.stringFormat("${format}")` as const;
+  return {
+    construct: joinedOf([...calls.map(callOf), stringFormat], 'or'),
+    instead: `.regex(z.regexes.${regexName})`,
+  };
 }
 
-function callOf(call: string): string {
+function callOf<Call extends string>(call: Call): `${Call}()` {
   return `${call}()`;
 }
 

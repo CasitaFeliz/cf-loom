@@ -11,6 +11,15 @@ describe('problemLineOf', () => {
     expect(line).toBe('groups.orders.endpoints.0.path is missing');
   });
 
+  test('a key holding a dot or a space is one quoted segment', () => {
+    const line = problemLineOf({
+      at: ['codes', 'BAD_REQUEST', 'body', 'fields', 'a.b', 'required'],
+      reason: 'is not true or false',
+    });
+
+    expect(line).toBe('codes.BAD_REQUEST.body.fields."a.b".required is not true or false');
+  });
+
   test('the root has no segments and is written (root)', () => {
     const line = problemLineOf({ at: [], reason: 'is not an object' });
 

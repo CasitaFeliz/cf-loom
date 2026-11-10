@@ -321,6 +321,27 @@ describe('a refused zod check', () => {
     expect(constructsOf(checked(z.string(), check))).toEqual([construct]);
   });
 
+  const regexBuiltFormats: readonly (readonly [string, string])[] = [
+    ['hex', 'z.hex()'],
+    ['hostname', 'z.hostname()'],
+    ['currency_code', 'z.currencyCode()'],
+    ...['md5', 'sha1', 'sha256', 'sha384', 'sha512'].flatMap((algorithm) =>
+      ['hex', 'base64', 'base64url'].map((encoding): [string, string] => [
+        `${algorithm}_${encoding}`,
+        'z.hash()',
+      ]),
+    ),
+  ];
+
+  test.for(regexBuiltFormats)(
+    'a function-checked format named %s is named by %s and by z.stringFormat() of its name',
+    ([format, call]) => {
+      const check = z.stringFormat(format, () => true);
+
+      expect(constructsOf(onBoolean(check))).toEqual([`${call} or z.stringFormat("${format}")`]);
+    },
+  );
+
   test.each([
     ['without a version', z.uuid(), 'z.uuid()'],
     ['of a version zod has a function for', z.uuidv4(), 'z.uuidv4() or z.uuid({ version: "v4" })'],

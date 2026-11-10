@@ -18,6 +18,8 @@ import {
   joinedOf,
   type Root,
   type RootPackage,
+  siteTextOf,
+  type Token,
   validateRoot,
 } from '../internal/index.ts';
 
@@ -1557,11 +1559,11 @@ function rootOfDraw(draw: Draw) {
 }
 
 /** A place a refusal is told at, with its site. */
-type At = { readonly text: string; readonly site: string };
+type At = { readonly text: string; readonly site: Token };
 
 /** The text of a site of a body. */
-function siteOf({ site }: Body): string {
-  return `endpoints.GET /e${site} (e${site})`;
+function siteOf({ site }: Body): Token {
+  return siteTextOf({ kind: 'endpoint', identity: `GET /e${site}`, name: `e${site}` });
 }
 
 /** The order of two texts by code point, a shorter text first when it begins the other, read from the code points themselves. */
@@ -1614,8 +1616,8 @@ function firstPlacesOf(draw: Draw): readonly (At | undefined)[] {
 }
 
 /** The sites of the bodies that reach each def, through the defs they hold. */
-function sitesReachingOf(draw: Draw): readonly ReadonlySet<string>[] {
-  const reaching = draw.defs.map(() => new Set<string>());
+function sitesReachingOf(draw: Draw): readonly ReadonlySet<Token>[] {
+  const reaching = draw.defs.map(() => new Set<Token>());
   for (const body of draw.bodies) {
     for (const { to } of body.holdings) {
       for (const index of reachableFrom(draw.defs, to)) {
@@ -1639,14 +1641,14 @@ type Telling = {
   readonly schema: string;
   readonly refusal: string;
   readonly at: At;
-  readonly sites: ReadonlySet<string>;
+  readonly sites: ReadonlySet<Token>;
 };
 
 /** A def or a body that holds refusals: its name, its place and the sites that reach it. */
 type Owner = {
   readonly id: string;
   readonly at: At;
-  readonly sites: ReadonlySet<string>;
+  readonly sites: ReadonlySet<Token>;
 };
 
 /** The refusals a def or a body holds at its place: its leaves, and the unions and intersections that hold a def reaching an openEnum(). */
@@ -1686,7 +1688,7 @@ function allTellingsOf(draw: Draw): readonly Telling[] {
   });
   const inDefs = draw.defs.flatMap((holds, index) => {
     const at = first[index];
-    const sites = reaching[index] ?? new Set<string>();
+    const sites = reaching[index] ?? new Set<Token>();
     return at === undefined ? [] : tellingsOf({ id: `d${index}`, at, sites }, holds, reachesOpen);
   });
   return [...inBodies, ...inDefs];

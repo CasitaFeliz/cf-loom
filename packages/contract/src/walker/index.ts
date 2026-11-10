@@ -69,7 +69,6 @@ export {
   snapshotPathOf,
   stepListOf,
   stepsBelow,
-  tokenOf,
   valueStep,
   variantStep,
 } from './steps.ts';

@@ -295,6 +295,28 @@ describe('validateRoot and snapshotOf: where a reached declaration came from', (
     });
   });
 
+  test('two packages whose names hold a comma are each one item of the list naming both', () => {
+    const p1Reaches: ImportedDefinitions[] = [];
+    const p1 = aPackage('a, b', { apiKey }, p1Reaches);
+    const p2 = aPackage('c and d', { apiKey }, [p1]);
+    p1Reaches.push(p2);
+
+    const validated = summarized(validatedOf(aService({ guards: [apiKey] }), [p1, p2]));
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          location: 'guards.apiKey',
+          rule: 'definitions-ambiguous',
+          message:
+            'A declaration belongs to one Definitions Package: exported by both "a, b" and "c and d", and neither imports it from the other',
+        },
+      ],
+    });
+  });
+
   test('a schema two packages export, neither importing the other, fails where the walk meets it', () => {
     const p1 = aPackage('@p1/defs', { money });
     const p2 = aPackage('@p2/defs', { money });

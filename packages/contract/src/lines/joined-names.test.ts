@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
-import { joinedOf } from '../internal/index.ts';
+import { joinedOf, type Token, wordOf } from '../internal/index.ts';
 
 const letters = ['a', 'b', 'c', 'd', 'e', 'f'] as const;
 const closings = ['and', 'or'] as const;
@@ -101,13 +101,13 @@ describe('joinedOf for a list whose length its type leaves open', () => {
     expectTypeOf<TextOf<['a', ...string[], 'z'], 'and'>>().toEqualTypeOf<string>();
     // biome-ignore lint/suspicious/noExplicitAny: the any this test is about
     expectTypeOf<TextOf<any, 'and'>>().toEqualTypeOf<string>();
-    expect(joinedOf(['x', 'y'].filter(Boolean), 'or')).toBe('x or y');
+    expect(joinedOf(['x', 'y'].filter(Boolean).map(wordOf), 'or')).toBe('x or y');
   });
 
-  test('joinedOf types a variable upcast to a list of strings as string', () => {
-    const upcast: readonly string[] = ['x', 'y'] as const;
+  test('joinedOf types a list of Tokens of unknown length as string', () => {
+    const tokens: readonly Token[] = ['x', 'y'].map(wordOf);
 
-    const text = joinedOf(upcast, 'or');
+    const text = joinedOf(tokens, 'or');
 
     expectTypeOf(text).toEqualTypeOf<string>();
     expect(text).toBe('x or y');

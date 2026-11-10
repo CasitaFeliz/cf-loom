@@ -120,7 +120,7 @@ describe('providedSnapshotOf', () => {
     const read = () => providedSnapshotOf(damaged);
 
     expect(read).toThrow(
-      "orders-service's exported Snapshot is malformed: endpoints.GET /orders/{}.name is missing",
+      `orders-service's exported Snapshot is malformed: endpoints."GET /orders/{}".name is missing`,
     );
   });
 
@@ -132,7 +132,7 @@ describe('providedSnapshotOf', () => {
     const read = () => providedSnapshotOf(damaged);
 
     expect(read).toThrow(
-      "orders-service's exported Snapshot is malformed: endpoints.GET /orders/{}.extra is a key its format does not define",
+      `orders-service's exported Snapshot is malformed: endpoints."GET /orders/{}".extra is a key its format does not define`,
     );
   });
 
@@ -144,7 +144,7 @@ describe('providedSnapshotOf', () => {
     const read = () => providedSnapshotOf(damaged);
 
     expect(read).toThrow(
-      `orders-service's exported Snapshot is malformed: endpoints.GET /orders/{}.lifecycle is not "active" or "deprecated"`,
+      `orders-service's exported Snapshot is malformed: endpoints."GET /orders/{}".lifecycle is not "active" or "deprecated"`,
     );
   });
 
@@ -193,7 +193,7 @@ describe('providedSnapshotOf', () => {
     const read = () => providedSnapshotOf(damaged);
 
     expect(read).toThrow(
-      `orders-service's exported Snapshot is malformed: shadowing.GET /orders/latest.lifecycle is not "active", "deprecated" or "retired"`,
+      `orders-service's exported Snapshot is malformed: shadowing."GET /orders/latest".lifecycle is not "active", "deprecated" or "retired"`,
     );
   });
 
@@ -205,7 +205,7 @@ describe('providedSnapshotOf', () => {
     const read = () => providedSnapshotOf(damaged);
 
     expect(read).toThrow(
-      "orders-service's exported Snapshot is malformed: shadowing.GET /orders/latest.name is a key its format does not define",
+      `orders-service's exported Snapshot is malformed: shadowing."GET /orders/latest".name is a key its format does not define`,
     );
   });
 
@@ -257,7 +257,7 @@ describe('providedSnapshotOf', () => {
       providedSnapshotOf(providedEndpoint(aProvider('orders-service'), oldOrder, cut));
 
     expect(read).toThrow(
-      "orders-service's exported Snapshot is malformed: endpoints.GET /old-orders/{}.deprecatedAt is missing",
+      `orders-service's exported Snapshot is malformed: endpoints."GET /old-orders/{}".deprecatedAt is missing`,
     );
   });
 

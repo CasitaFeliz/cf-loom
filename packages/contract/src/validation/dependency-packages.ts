@@ -1,4 +1,5 @@
 import { isEndpoint, isProvidedElement, providerOf } from '../declarations/index.ts';
+import { joinedOf } from '../lines/index.ts';
 import type { Place } from '../walker/index.ts';
 import { type Declarations, isOwnProvided, listOf } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
@@ -94,8 +95,9 @@ function problemOf(
     case 'none':
       return `A Provider's Elements come from an installed Contract Package: no installed package exports ${provider}'s Elements`;
     case 'ambiguous': {
-      const [first, second] = provenance.packages.map(packageLabelOf);
-      const both = `exported by both ${first} and ${second}, and neither imports them from the other`;
+      const [first, second] = provenance.packages;
+      const labels = joinedOf([packageLabelOf(first), packageLabelOf(second)], 'and');
+      const both = `exported by both ${labels}, and neither imports them from the other`;
       return `A Provider's Elements come from one Contract Package: ${provider}'s Elements are ${both}`;
     }
   }
