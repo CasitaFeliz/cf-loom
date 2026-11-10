@@ -11,7 +11,8 @@
     "test",
     "../contract/test/collected.ts",
     "../contract/test/line-breaks.ts",
-    "../contract/test/printed.ts"
+    "../contract/test/printed.ts",
+    "../messaging/test/test-process.ts"
   ],
   "references": [
     {

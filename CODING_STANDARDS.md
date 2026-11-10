@@ -304,11 +304,14 @@ of its own **(lint)**. A test's fixtures fit the light budget
 ([CLAUDE.md](CLAUDE.md#repository)); a row that needs more goes in a `*.heavy.test.ts` file or, for a growth family, a
 `*.growth.test.ts` file, never a bigger budget for the project. A test file reads no clock: `performance.now()`,
 `Date.now()`, `process.hrtime`, `process.cpuUsage` and `process.threadCpuUsage` in a `*.test.ts` are errors
-**(lint)**, and the helpers that read one are not test files.
+**(lint)**, and the helpers that read one are not test files. A test runs a program through `runProcess`, from
+`packages/messaging/test/test-process.ts`, which its test or hook owns and the hang bound bounds, and never imports
+`node:child_process`, outside `packages/cli` **(lint)**.
 *Why:* a shared runner slows a clock several times over, and absolute bounds turned CI red at least eight times; Vitest
-cannot stop a synchronous test, so a timeout sized from a quiet run only reads the clock after it returns, and a runner
-shares its CPUs; a step costs more at the large size beside neighbours that share the memory, which a bound near the
-claimed growth, written again in each file, could not hold.
+cannot stop a synchronous test, so a timeout sized from a quiet run only reads the clock after it returns, a program run
+by a blocking call holds the worker until CI's own limit, and a runner shares its CPUs; a step costs more at the large
+size beside neighbours that share the memory, which a bound near the claimed growth, written again in each file, could
+not hold.
 
 ## Reviewing
 
@@ -349,9 +352,13 @@ are out of reach), and, in a `*.test.ts`, a read of a clock (`performance.now()`
 `process.cpuUsage`, `process.threadCpuUsage`), a timeout given to a test, a suite or a hook, and any `vi.setConfig` (an
 options object passed through a variable or a spread, and a test function under another name, a `test.extend` alias or
 a renamed import, are out of reach; a test given both its options and its body by name is reported, so write one
-inline) (C30), and, in any file but `packages/contract/test/printed.ts`, a `vi.spyOn` or `vi?.spyOn`, with any
-arguments, whose first argument names `console` (C23; `vitest.spyOn`, an aliased `console` and a spy made another way,
-as `console.error = …`, are out of reach).
+inline) (C30), and, in a `*.test.ts` or a file under `test/` of a package, an example or `scripts/readme-service/`,
+outside `packages/messaging/test/test-process.ts` and `packages/cli/`, an import, a re-export, a `require`, an
+`import()` or a `process.getBuiltinModule` of `node:child_process` or `child_process` (C30; `module.require`,
+`globalThis.require`, `createRequire`, and a file named `.mts` or `.js`, are out of reach), and, in any file but
+`packages/contract/test/printed.ts`, a `vi.spyOn` or `vi?.spyOn`, with any arguments, whose first argument names
+`console` (C23; `vitest.spyOn`, an aliased `console` and a spy made another way, as `console.error = …`, are out of
+reach).
 `scripts/check-tsdoc.ts` fails on an exported declaration in a package's `src` with no TSDoc directly above it (C20);
 `pnpm check` and CI run it. `scripts/check-layout.ts` fails on a `src/` that breaks
 [Package layout](ARCHITECTURE.md#package-layout); `pnpm check` and CI run it. `scripts/check-expect-errors.ts`

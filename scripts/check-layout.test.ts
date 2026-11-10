@@ -1,4 +1,3 @@
-import { spawnSync } from 'node:child_process';
 import {
   cpSync,
   mkdirSync,
@@ -11,6 +10,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { runProcess } from '../packages/messaging/test/test-process.ts';
 import { layoutViolations } from './check-layout.ts';
 
 const manifest = {
@@ -301,13 +301,10 @@ describe('layoutViolations', () => {
 });
 
 describe('node scripts/check-layout.ts', () => {
-  it('names the file and the rule, and exits with status 1', () => {
+  it('names the file and the rule, and exits with status 1', async () => {
     const repositoryDir = aRepositoryWith({ 'src/predicates.ts': 'export const one = 1;\n' });
 
-    const run = spawnSync('node', ['scripts/check-layout.ts'], {
-      cwd: repositoryDir,
-      encoding: 'utf8',
-    });
+    const run = await runProcess('node', ['scripts/check-layout.ts'], { cwd: repositoryDir });
 
     expect({ status: run.status, stderr: run.stderr }).toEqual({
       status: 1,
