@@ -339,3 +339,84 @@ describe('validateRoot: params against the path', () => {
     );
   });
 });
+
+describe('validateRoot: params beside a schema that fails', () => {
+  /** An object the types refuse, as a cast lets an author write it. */
+  const headersOf = (shape: Record<string, z.ZodType>) =>
+    z.object(shape) as unknown as z.ZodObject<{ orderId: z.ZodUUID }>;
+  const paramsAt = 'endpoints.GET /orders/{} (listOrders) input.params';
+  const dateRefusal = (location: string) => ({
+    kind: 'not-allowed',
+    location,
+    construct: 'z.date()',
+    instead: 'z.iso.datetime()',
+    alsoIn: [],
+  });
+
+  test('a path param that is an object holding a date tells that it is no text, and the date', () => {
+    const getOrder = defineEndpoint({
+      ...listOrders,
+      path: '/orders/:orderId',
+      input: { params: headersOf({ orderId: z.object({ placedAt: z.date() }) }) },
+    });
+
+    expect(validateEndpoint(getOrder)).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          location: `${paramsAt}.orderId`,
+          rule: 'not-text',
+          message:
+            'A path param travels as text: a string, number, boolean, literal or enum: orderId',
+        },
+        dateRefusal(`${paramsAt}.orderId.placedAt`),
+      ],
+    });
+  });
+
+  test('a param that is not a :name of the path, beside a date, tells both', () => {
+    const params = z.object({
+      orderId: z.uuid(),
+      extra: z.string(),
+      placedAt: z.date(),
+    }) as z.ZodObject<{
+      orderId: z.ZodUUID;
+    }>;
+    const getOrder = defineEndpoint({ ...listOrders, path: '/orders/:orderId', input: { params } });
+
+    expect(validateEndpoint(getOrder)).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          location: paramsAt,
+          rule: 'exact-params',
+          message: "params declares exactly the path's :names: orderId",
+        },
+        dateRefusal(`${paramsAt}.placedAt`),
+      ],
+    });
+  });
+
+  test('params that are nullable and whose kind is not built tell the date alone, since their fix decides whether they are an object', () => {
+    const params = z.date().nullable() as unknown as z.ZodObject<{ orderId: z.ZodUUID }>;
+    const getOrder = defineEndpoint({ ...listOrders, path: '/orders/:orderId', input: { params } });
+
+    expect(validateEndpoint(getOrder)).toEqual({
+      kind: 'invalid',
+      failures: [dateRefusal(paramsAt)],
+    });
+  });
+
+  test('an object holding a field named constructor tells that name alone, since it is unbuilt', () => {
+    const params = headersOf({ orderId: z.uuid(), constructor: z.string() });
+    const getOrder = defineEndpoint({ ...listOrders, path: '/orders/:orderId', input: { params } });
+
+    const validated = validateEndpoint(getOrder);
+
+    expect(validated.kind === 'invalid' ? validated.failures.map(({ kind }) => kind) : []).toEqual([
+      'not-allowed',
+    ]);
+  });
+});

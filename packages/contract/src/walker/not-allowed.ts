@@ -208,7 +208,7 @@ export function refusedStringFormat(format: string): Refused {
   return { construct: `z.stringFormat(${JSON.stringify(format)})` };
 }
 
-/** One failure, as the walk of a schema returns it, with the node the walk was building. */
+/** One failure, as the walk of a schema returns it, with the node the walk was building, or none for a construct refused at its own schema. */
 export function notAllowed(at: Reached, construct: Refused, outline?: Outline): Failed {
   return failed([{ kind: 'not-allowed', ...at, ...construct }], outline);
 }

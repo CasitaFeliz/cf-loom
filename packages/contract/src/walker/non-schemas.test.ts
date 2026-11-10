@@ -42,47 +42,79 @@ type Slot = {
   readonly alsoRefusedAroundSchema?: readonly string[];
   /** A slot reads through the child that is this one to what it holds, so judges it by that. */
   readonly isReadThrough?: true;
+  /** The slot is a record's key: it tells what its child, when that builds a part, makes of a key. */
+  readonly isRecordKey?: true;
+  /** What a record key says of this slot's schema, which builds a part even where a value inside it is refused. */
+  readonly asRecordKey?: string;
 };
+
+const keyNotString = 'a z.record() key that is not a string';
 
 const jsonOptions = [z.string(), z.number(), z.boolean(), z.null()] as const;
 const stringKeyed = z.record(z.string(), z.string());
 
 /** Every slot the walk reads a schema in, those the readers peek at before they enter included. */
 const slots: readonly Slot[] = [
-  { name: 'an object field', around: (child) => z.object({ a: child }), steps: [fieldAt('a')] },
+  {
+    name: 'an object field',
+    around: (child) => z.object({ a: child }),
+    steps: [fieldAt('a')],
+    asRecordKey: keyNotString,
+  },
   {
     name: 'a field’s .optional()',
     around: (child) => z.object({ a: z.optional(child) }),
     steps: [fieldAt('a')],
+    asRecordKey: keyNotString,
   },
   {
     name: 'a field’s .nonoptional()',
     around: (child) => z.object({ a: z.nonoptional(child) }),
     steps: [fieldAt('a')],
+    asRecordKey: keyNotString,
   },
-  { name: 'a .nullable()', around: (child) => z.nullable(child), steps: [] },
-  { name: 'an array’s items', around: (child) => z.array(child), steps: [itemsAt] },
+  {
+    name: 'a .nullable()',
+    around: (child) => z.nullable(child),
+    steps: [],
+    asRecordKey: 'a nullable z.record() key',
+  },
+  {
+    name: 'an array’s items',
+    around: (child) => z.array(child),
+    steps: [itemsAt],
+    asRecordKey: keyNotString,
+  },
   {
     name: 'a tuple’s item',
     around: (child) => z.tuple([child]),
     steps: [{ kind: 'index', index: 0 }],
+    asRecordKey: keyNotString,
   },
   {
     name: 'a tuple’s rest',
     around: (child) => new z.ZodTuple({ type: 'tuple', items: [z.string()], rest: child }),
     steps: [{ kind: 'rest' }],
     noneIs: null,
+    asRecordKey: keyNotString,
   },
   {
     name: 'a record’s value',
     around: (child) => new z.ZodRecord({ type: 'record', keyType: z.string(), valueType: child }),
     steps: [valueAt],
+    asRecordKey: keyNotString,
   },
-  { name: 'a record’s key', around: (child) => z.record(child, z.string()), steps: [keyAt] },
+  {
+    name: 'a record’s key',
+    around: (child) => z.record(child, z.string()),
+    steps: [keyAt],
+    isRecordKey: true,
+  },
   {
     name: 'a union’s option',
     around: (child) => z.union([z.string(), child]),
     steps: [optionAt(1)],
+    asRecordKey: keyNotString,
   },
   {
     name: 'an intersection’s side',
@@ -136,48 +168,57 @@ const slots: readonly Slot[] = [
     name: 'a field of a discriminated union’s variant',
     around: (child) => z.discriminatedUnion('k', [z.object({ k: z.literal('a'), x: child })]),
     steps: [{ kind: 'variant', discriminator: 'k', value: '"a"' }, fieldAt('x')],
+    asRecordKey: keyNotString,
   },
   {
     name: 'a field of a lazy discriminated union variant',
     around: (child) =>
       z.discriminatedUnion('k', [z.lazy(() => z.object({ k: z.literal('a'), x: child })) as never]),
     steps: [{ kind: 'variant', discriminator: 'k', value: '"a"' }, fieldAt('x')],
+    asRecordKey: keyNotString,
   },
   {
     name: 'a discriminated union’s discriminator',
     around: (child) => z.discriminatedUnion('k', [z.object({ k: child })]),
     steps: [optionAt(0), fieldAt('k')],
     alsoRefusedAroundSchema: ['a discriminated union variant whose discriminator is not a literal'],
+    asRecordKey: keyNotString,
   },
   {
     name: 'a discriminated union’s variant',
     around: (child) => z.discriminatedUnion('k', [child]),
     steps: [optionAt(0)],
     onlyDirect: true,
+    asRecordKey: keyNotString,
   },
   {
     name: 'a discriminated union’s lazy variant',
     around: (child) => z.discriminatedUnion('k', [z.lazy(() => child) as never]),
     steps: [optionAt(0)],
     onlyDirect: true,
+    asRecordKey: keyNotString,
   },
   {
     name: 'a JSON-shaped union’s record key',
     around: (child) => z.union([...jsonOptions, z.array(z.string()), z.record(child, z.string())]),
     steps: [optionAt(5), keyAt],
     alsoRefused: ['z.null()'],
+    asRecordKey: keyNotString,
+    isRecordKey: true,
   },
   {
     name: 'a JSON-shaped union’s array items',
     around: (child) => z.union([...jsonOptions, z.array(child), stringKeyed]),
     steps: [optionAt(4), itemsAt],
     alsoRefused: ['z.null()'],
+    asRecordKey: keyNotString,
   },
   {
     name: 'a JSON-shaped union’s option',
     around: (child) => z.union([...jsonOptions, child, stringKeyed]),
     steps: [optionAt(4)],
     alsoRefused: ['z.null()'],
+    asRecordKey: keyNotString,
   },
 ];
 
@@ -240,13 +281,18 @@ function problemOf(nesting: Nesting, what: string, schema: unknown): string | un
   }
 }
 
-/** The lines a slot earns of its own: those beside any child, and, around a schema, those beside it. */
+/**
+ * The lines a slot earns of its own: those beside any child, those beside a schema, and what a
+ * record key says of a child that builds a part, since a key is a string alone.
+ */
 function linesOf(slot: Slot, position: number, nesting: readonly Slot[]): readonly string[] {
   const child = nesting[position + 1];
   const aroundSchema = child !== undefined && child.isReadThrough !== true;
+  const asKey = slot.isRecordKey === true && child?.asRecordKey !== undefined;
   return [
     ...(slot.alsoRefused ?? []),
     ...(aroundSchema ? (slot.alsoRefusedAroundSchema ?? []) : []),
+    ...(asKey ? [child.asRecordKey] : []),
   ];
 }
 

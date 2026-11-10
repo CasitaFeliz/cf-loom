@@ -1,13 +1,12 @@
 import { type DefGraph, defGraphOf } from './def-graph.ts';
-import type { SchemaNode } from './nodes.ts';
-import type { Defs } from './walk.ts';
+import type { JudgedDefs, Outline } from './walked.ts';
 
 /**
  * The defs that lead back to themselves through `ref`s, `union` options and `allOf` items alone,
  * with no other node between, which zod's parse never ends on, found once for the defs, so the
  * time grows with the defs and their nodes. A `ref` to a name with no def leads nowhere.
  */
-export function defsLeadingBackWithNoNodeOf(defs: Defs): ReadonlySet<string> {
+export function defsLeadingBackWithNoNodeOf(defs: JudgedDefs): ReadonlySet<string> {
   return new Set(nodelessCyclesOf(defs).flat());
 }
 
@@ -16,7 +15,7 @@ export function defsLeadingBackWithNoNodeOf(defs: Defs): ReadonlySet<string> {
  * with no node between that holds two defs or more, or a def stepping to itself, which zod's
  * parse never ends on. A `ref` to a name the defs do not hold leads nowhere.
  */
-export function nodelessCyclesOf(defs: Defs): readonly (readonly string[])[] {
+export function nodelessCyclesOf(defs: JudgedDefs): readonly (readonly string[])[] {
   return cycleMembersFrom(defs);
 }
 
@@ -34,7 +33,7 @@ type Entry = {
 };
 
 type Search = {
-  readonly def: DefGraph['def'];
+  readonly def: DefGraph<Outline>['def'];
   readonly entries: Map<string, Entry>;
   /** The defs of the groups not closed yet, in the order they were met. */
   readonly open: Entry[];
@@ -47,7 +46,7 @@ type Search = {
  * cycle: two defs or more, or a def stepping to itself; read with an explicit stack, one frame
  * per def, and a name with no def has no steps and leads nowhere.
  */
-function cycleMembersFrom(defs: Defs): readonly (readonly string[])[] {
+function cycleMembersFrom(defs: JudgedDefs): readonly (readonly string[])[] {
   const search: Search = { def: defGraphOf(defs).def, entries: new Map(), open: [], groups: [] };
   for (const start of Object.keys(defs)) {
     if (!search.entries.has(start)) {
@@ -123,9 +122,9 @@ function closeGroup(entry: Entry, search: Search): void {
 }
 
 /** The def names a def's `ref`s name with no node between, through options and items, each once. */
-function nodelessDefsFrom(def: SchemaNode): readonly string[] {
+function nodelessDefsFrom(def: Outline): readonly string[] {
   const names = new Set<string>();
-  const pending = [def];
+  const pending: Outline[] = [def];
   for (let node = pending.pop(); node !== undefined; node = pending.pop()) {
     if (node.type === 'ref') {
       names.add(node.name);
@@ -139,7 +138,7 @@ function nodelessDefsFrom(def: SchemaNode): readonly string[] {
 }
 
 /** The nodes a path with no node between steps to from a node that is no `ref`. */
-function nodelessStepsFrom(node: SchemaNode): readonly SchemaNode[] {
+function nodelessStepsFrom(node: Outline): readonly Outline[] {
   switch (node.type) {
     case 'union':
       return node.options;
@@ -156,6 +155,7 @@ function nodelessStepsFrom(node: SchemaNode): readonly SchemaNode[] {
     case 'tuple':
     case 'tagged':
     case 'json':
+    case undefined:
       return [];
   }
 }

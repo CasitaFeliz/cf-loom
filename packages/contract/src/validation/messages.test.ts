@@ -527,6 +527,168 @@ describe('validateRoot: a Message body is an object of its fields', () => {
   });
 });
 
+describe('validateRoot: a Message body beside a schema that fails', () => {
+  const eventAt = 'events.OrderCreated@1 body';
+  const dateRefusal = (location: string) => ({
+    kind: 'not-allowed',
+    location,
+    construct: 'z.date()',
+    instead: 'z.iso.datetime()',
+    alsoIn: [],
+  });
+  const bodyLine = {
+    kind: 'declaration',
+    location: eventAt,
+    rule: 'not-an-object-schema',
+    message: 'A Message body is an object of its fields: OrderCreated@1',
+  };
+  const treeWith = (leaf: z.ZodType) => {
+    const tree: z.ZodType = z.union([leaf, z.array(z.lazy(() => tree))]).meta({ id: 'tree' });
+    return tree;
+  };
+
+  test('a body that is a union with a date in an option tells both', () => {
+    const body = z.union([z.object({ orderId: z.uuid() }), z.date()]);
+
+    expect(validateMessages([anEvent({ body })])).toEqual({
+      kind: 'invalid',
+      failures: [bodyLine, dateRefusal(`${eventAt}<|1>`)],
+    });
+  });
+
+  test('a body that is a ref to a def that is no object tells so when the def walked whole', () => {
+    expect(validateMessages([anEvent({ body: treeWith(z.string()) })])).toEqual({
+      kind: 'invalid',
+      failures: [bodyLine],
+    });
+  });
+
+  test('a body that is a ref to a def that fails on its own and is no object tells both', () => {
+    expect(validateMessages([anEvent({ body: treeWith(z.date()) })])).toEqual({
+      kind: 'invalid',
+      failures: [bodyLine, dateRefusal(`${eventAt}<|0>`)],
+    });
+  });
+
+  test('a body that is a ref to a def whose kind is not built tells the def’s failure alone', () => {
+    const tree: z.ZodType = z
+      .object({
+        constructor: z.string(),
+        get next() {
+          return tree.optional();
+        },
+      })
+      .meta({ id: 'tree' });
+
+    const validated = validateMessages([anEvent({ body: tree })]);
+
+    expect(validated.kind === 'invalid' ? validated.failures.map(({ kind }) => kind) : []).toEqual([
+      'not-allowed',
+    ]);
+  });
+
+  test('a body that is a nullable schema whose kind is not built tells that it is no object', () => {
+    expect(validateMessages([anEvent({ body: z.date().nullable() })])).toEqual({
+      kind: 'invalid',
+      failures: [bodyLine, dateRefusal(eventAt)],
+    });
+  });
+
+  test('a body that is a nullable ref to a def whose kind is not built tells that it is no object', () => {
+    const tree: z.ZodType = z
+      .object({
+        constructor: z.string(),
+        get next() {
+          return tree.optional();
+        },
+      })
+      .meta({ id: 'tree' });
+
+    const validated = validateMessages([anEvent({ body: tree.nullable() })]);
+
+    expect(validated.kind === 'invalid' ? validated.failures.map(({ kind }) => kind) : []).toEqual([
+      'declaration',
+      'not-allowed',
+    ]);
+  });
+
+  test('a body that is a def that admits null tells that def’s line alone, which owns its nullability', () => {
+    const node: z.ZodType = z
+      .object({
+        get next() {
+          return node.optional();
+        },
+      })
+      .nullable()
+      .meta({ id: 'nd' });
+
+    expect(validateMessages([anEvent({ body: node })])).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'not-allowed',
+          location: eventAt,
+          construct: '.meta({ id: "nd" }) on a schema that admits null',
+          instead: '.meta({ id }) on the schema inside, and .nullable() on each use',
+          alsoIn: [],
+        },
+      ],
+    });
+  });
+
+  test('a body that is a nullable ref to a def that fails on its own tells both', () => {
+    expect(validateMessages([anEvent({ body: treeWith(z.date()).nullable() })])).toEqual({
+      kind: 'invalid',
+      failures: [bodyLine, dateRefusal(`${eventAt}<|0>`)],
+    });
+  });
+});
+
+describe('validateRoot: a def that a failure of its group took the place of keeps its own ref', () => {
+  test('a body that is a def of a group whose other def fails is judged as its own def', () => {
+    const outer: z.ZodType = z
+      .object({
+        get failing() {
+          return failing;
+        },
+      })
+      .meta({ id: 'outer' });
+    const failing: z.ZodType = z
+      .object({
+        placedAt: z.date(),
+        get held() {
+          return held;
+        },
+      })
+      .meta({ id: 'failing' });
+    const held: z.ZodType = z.union([z.lazy(() => outer), z.string()]).meta({ id: 'held' });
+
+    const result = validateMessages([
+      anEvent({ name: 'First', body: outer }),
+      anEvent({ name: 'Second', body: held }),
+    ]);
+
+    expect(result).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          location: 'events.Second@1 body',
+          rule: 'not-an-object-schema',
+          message: 'A Message body is an object of its fields: Second@1',
+        },
+        {
+          kind: 'not-allowed',
+          location: 'events.First@1 body.failing.placedAt',
+          construct: 'z.date()',
+          instead: 'z.iso.datetime()',
+          alsoIn: ['events.Second@1'],
+        },
+      ],
+    });
+  });
+});
+
 describe('validateRoot: Message Versions that fail only as fields', () => {
   test.each([
     ['two Events with no name', [anEvent({ name: undefined }), anEvent({ name: undefined })], []],

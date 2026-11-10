@@ -16,6 +16,7 @@ import {
   inFields,
   inside,
   isSchema,
+  isWhole,
   type Place,
   withinStack,
 } from '../walker/index.ts';
@@ -112,14 +113,14 @@ function listedOf(at: Place, endpoint: LocatedEndpoint['endpoint']): readonly Li
 }
 
 /**
- * Only a Qualifier whose schema walked is parsed: a walked schema holds no transform, default or
- * catch, so its parse differs from the value only by the keys it strips.
+ * Only a Qualifier whose schema walked whole is parsed: a schema with nothing Not allowed holds no
+ * transform, default or catch, so its parse differs from the value only by the keys it strips.
  */
 function valueFailures(
   { at, attachment, guard }: Qualified,
   nodes: Nodes,
 ): readonly DeclarationFailure[] {
-  const isWalked = nodes.nodeOf(guard, 'qualifier') !== undefined;
+  const isWalked = isWhole(nodes.nodeOf(guard, 'qualifier'));
   const { qualifier } = guard;
   if (qualifier === undefined || !isWalked || isWithoutValue(attachment.qualifier)) {
     return [];

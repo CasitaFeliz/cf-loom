@@ -719,6 +719,26 @@ function reportedKeysOf(validated: Validated): readonly string[] {
   return validated.failures.filter(isQualifierKeysFailure).flatMap(keysNamedBy).sort();
 }
 
+describe('validateRoot: a Qualifier whose schema fails is never parsed', () => {
+  test('a .refine() on a Qualifier’s schema, which fails the walk, never runs', () => {
+    let parses = 0;
+    const counted = defineGuard({
+      name: 'counted',
+      description: 'A counted Qualifier',
+      qualifier: z.object({ perMinute: z.int() }).refine(() => {
+        parses++;
+        return true;
+      }),
+    });
+    const guards: readonly Attachment[] = [{ guard: counted, qualifier: { perMinute: 'many' } }];
+
+    const validated = validateGuards(guards);
+
+    expect(validated.kind).toBe('invalid');
+    expect(parses).toBe(0);
+  });
+});
+
 describe('validateRoot: a Qualifier holds the keys zod keeps when it parses it', () => {
   test('generate names exactly the keys zod strips, whatever the union, record, array or tuple around them', () => {
     const next = seededNext(214);

@@ -45,7 +45,7 @@ export const unknownIsNoChain: Record<Found, 0> = { ...found, unknownReader: 0 }
 // @ts-expect-error TS2353 anyReader is no reader
 export const anyIsNoChain: Record<Found, 0> = { ...found, anyReader: 0 };
 
-/** The derived set is exactly the 26 exports of `./internal` that read or make a chain. */
+/** The derived set is exactly the 27 exports of `./internal` that read or make a chain. */
 export const allReaders: Record<ChainReader, 0> = {
   brokerPlanOf: 0,
   canonicalSnapshotOf: 0,
@@ -63,6 +63,7 @@ export const allReaders: Record<ChainReader, 0> = {
   headerValuesOf: 0,
   isEmptyTextPart: 0,
   isRemoved: 0,
+  isWhole: 0,
   nestingFailureOf: 0,
   originPackagesOf: 0,
   ownRejectionsOf: 0,
