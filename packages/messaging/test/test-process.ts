@@ -51,7 +51,8 @@ const unfinished = new Map<TestProcess, string>();
 
 /**
  * The owner of what is created now: the running test, which also owns what its `beforeEach` and `afterEach` hooks
- * create, or the file while a `beforeAll` or `afterAll` hook runs. It throws, naming `what`, when neither runs.
+ * create, or the file while a `beforeAll` or `afterAll` hook runs. A fixture of file or worker scope is set up inside
+ * the first test that uses it, so that test owns what it creates. It throws, naming `what`, when neither runs.
  */
 function ownerOf(what: string): AsyncDisposableStack {
   const owner = owners.at(-1);
