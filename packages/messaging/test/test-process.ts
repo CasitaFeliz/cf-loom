@@ -28,10 +28,13 @@ export type TestProcess = {
   readonly stderr: () => string;
 };
 
-/** Where and how to spawn: `env` replaces the environment when given; `notOnPath` is the message when `command` is not on PATH. */
+/**
+ * Where and how to spawn: `env` replaces the environment when given, and leaves out a variable it gives as `undefined`;
+ * `notOnPath` is the message when `command` is not on PATH.
+ */
 export type Spawning = {
   readonly cwd?: string;
-  readonly env?: Readonly<Record<string, string>>;
+  readonly env?: Readonly<Record<string, string | undefined>>;
   readonly notOnPath?: string;
 };
 

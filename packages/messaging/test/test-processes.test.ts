@@ -42,14 +42,11 @@ function isRunning(pid: number): boolean {
 }
 
 /** This run's environment for a nested Vitest, without the variables that make it pick another reporter. */
-function environmentWithout(names: readonly string[]): Record<string, string> {
-  const kept: Record<string, string> = {};
-  for (const [name, value] of Object.entries(process.env)) {
-    if (value !== undefined && !names.includes(name) && !name.startsWith('VITEST')) {
-      kept[name] = value;
-    }
-  }
-  return kept;
+function environmentWithout(names: readonly string[]): Record<string, string | undefined> {
+  const dropped = Object.keys(process.env).filter(
+    (name) => names.includes(name) || name.startsWith('VITEST'),
+  );
+  return { ...process.env, ...Object.fromEntries(dropped.map((name) => [name, undefined])) };
 }
 
 async function linesOf(file: string): Promise<readonly string[]> {
@@ -246,6 +243,16 @@ describe('a run a test makes through test-process.ts', () => {
     const ran = await runProcess(process.execPath, ['-e', script], { input: 'asked' });
 
     expect(ran.stdout).toBe('asked');
+  });
+
+  test('a run whose environment gives a variable as undefined leaves it out', async () => {
+    const script = 'process.stdout.write(JSON.stringify(Object.keys(process.env)))';
+
+    const ran = await runProcess(process.execPath, ['-e', script], {
+      env: { KEPT: 'yes', DROPPED: undefined },
+    });
+
+    expect(ran.stdout).toBe('["KEPT"]');
   });
 
   test('a run that must succeed gives its stdout when it exits with 0', async () => {
