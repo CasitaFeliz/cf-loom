@@ -1,23 +1,23 @@
-import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { runProcess } from '../../../packages/messaging/test/test-process.ts';
 
 const serviceDir = join(import.meta.dirname, '..');
 const bin = join(serviceDir, 'node_modules/@cf-loom/cli/dist/bin.js');
 const snapshot = JSON.parse(readFileSync(join(serviceDir, 'contract.snapshot.json'), 'utf8'));
 const outDir = mkdtempSync(join(tmpdir(), 'orders-contract-package-'));
 
-function cfLoom(...args: string[]) {
-  const ran = spawnSync(process.execPath, [bin, ...args], { cwd: serviceDir, encoding: 'utf8' });
+async function cfLoom(...args: string[]) {
+  const ran = await runProcess(process.execPath, [bin, ...args], { cwd: serviceDir });
   return { status: ran.status, stderr: ran.stderr };
 }
 
-let packaged: ReturnType<typeof cfLoom>;
+let packaged: Awaited<ReturnType<typeof cfLoom>>;
 
-beforeAll(() => {
-  packaged = cfLoom('package', '--out', outDir);
+beforeAll(async () => {
+  packaged = await cfLoom('package', '--out', outDir);
 });
 
 afterAll(() => {
@@ -39,8 +39,8 @@ function filesOf(dir: string): Record<string, string> {
 }
 
 describe('the committed generated files', () => {
-  test('cf-loom verify finds them up to date', () => {
-    const verified = cfLoom('verify');
+  test('cf-loom verify finds them up to date', async () => {
+    const verified = await cfLoom('verify');
 
     expect(verified).toEqual({ status: 0, stderr: '' });
   });

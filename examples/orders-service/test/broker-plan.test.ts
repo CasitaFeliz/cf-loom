@@ -1,15 +1,14 @@
-import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
+import { runProcess } from '../../../packages/messaging/test/test-process.ts';
 
 const serviceDir = join(import.meta.dirname, '..');
 const bin = join(serviceDir, 'node_modules/@cf-loom/cli/dist/bin.js');
 
 describe('the broker plan', () => {
-  test('cf-loom broker-plan --json prints the stream and the two Durable consumers the Service needs', () => {
-    const ran = spawnSync(process.execPath, [bin, 'broker-plan', '--json'], {
+  test('cf-loom broker-plan --json prints the stream and the two Durable consumers the Service needs', async () => {
+    const ran = await runProcess(process.execPath, [bin, 'broker-plan', '--json'], {
       cwd: serviceDir,
-      encoding: 'utf8',
     });
 
     expect({ status: ran.status, stderr: ran.stderr }).toEqual({ status: 0, stderr: '' });

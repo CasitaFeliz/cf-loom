@@ -4,7 +4,13 @@ import { createRequire } from 'node:module';
 import { delimiter, dirname, join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { describe, expect, test } from 'vitest';
-import { aTemporaryDirectory, startProcess, type TestProcess } from './test-process.ts';
+import {
+  aTemporaryDirectory,
+  runForOutput,
+  runProcess,
+  startProcess,
+  type TestProcess,
+} from './test-process.ts';
 
 const fixtures = join(import.meta.dirname, 'test-processes');
 const vitestCli = join(
@@ -36,14 +42,11 @@ function isRunning(pid: number): boolean {
 }
 
 /** This run's environment for a nested Vitest, without the variables that make it pick another reporter. */
-function environmentWithout(names: readonly string[]): Record<string, string> {
-  const kept: Record<string, string> = {};
-  for (const [name, value] of Object.entries(process.env)) {
-    if (value !== undefined && !names.includes(name) && !name.startsWith('VITEST')) {
-      kept[name] = value;
-    }
-  }
-  return kept;
+function environmentWithout(names: readonly string[]): Record<string, string | undefined> {
+  const dropped = Object.keys(process.env).filter(
+    (name) => names.includes(name) || name.startsWith('VITEST'),
+  );
+  return { ...process.env, ...Object.fromEntries(dropped.map((name) => [name, undefined])) };
 }
 
 async function linesOf(file: string): Promise<readonly string[]> {
@@ -128,6 +131,13 @@ describe('a process a test starts through test-process.ts', () => {
     expect(run.pids).toHaveLength(2);
   });
 
+  test('a server that listened writes no line about a start still waiting when its owner ends', async () => {
+    const run = await runFixture('server-for-test.fixture.ts', { moto_server: 'serves' });
+
+    expect(run.passed).toBe(true);
+    expect(run.output).not.toContain('was still waiting to listen');
+  });
+
   test('a server that ignores SIGTERM, whose stop in afterEach times out, is killed when its owner ends', async () => {
     const run = await runFixture('hung-stop.fixture.ts', { moto_server: 'deaf' });
 
@@ -188,5 +198,144 @@ describe('a process a test starts through test-process.ts', () => {
     expect(run.output).toContain('no test or hook owns');
     expect(run.pids).toEqual([]);
     expect(run.leftInTemporary).toEqual([]);
+  });
+});
+
+describe('a run a test makes through test-process.ts', () => {
+  test('a run that exits with 0 gives its status and what it printed to stdout and stderr', async () => {
+    const script = "process.stdout.write('printed'); process.stderr.write('warned')";
+
+    const ran = await runProcess(process.execPath, ['-e', script]);
+
+    expect(ran).toEqual({ status: 0, stdout: 'printed', stderr: 'warned' });
+  });
+
+  test('a run that exits with a status other than 0 gives it, for its test to assert', async () => {
+    const ran = await runProcess(process.execPath, ['-e', 'process.exitCode = 3']);
+
+    expect(ran).toEqual({ status: 3, stdout: '', stderr: '' });
+  });
+
+  test('a run gives all it printed beyond the 1 MiB that spawnSync cuts at', async () => {
+    const script = "process.stdout.write('x'.repeat(3 * 1024 * 1024))";
+
+    const ran = await runProcess(process.execPath, ['-e', script]);
+
+    expect(ran.stdout).toBe('x'.repeat(3 * 1024 * 1024));
+  });
+
+  test('a character split across two chunks of output arrives whole', async () => {
+    const script = [
+      "const euro = Buffer.from('€');",
+      'process.stdout.write(euro.subarray(0, 1), () => {',
+      '  setTimeout(() => process.stdout.write(euro.subarray(1)), 50);',
+      '});',
+    ].join('\n');
+
+    const ran = await runProcess(process.execPath, ['-e', script]);
+
+    expect(ran.stdout).toBe('€');
+  });
+
+  test('a run is given the text written to its stdin', async () => {
+    const script = 'process.stdin.pipe(process.stdout)';
+
+    const ran = await runProcess(process.execPath, ['-e', script], { input: 'asked' });
+
+    expect(ran.stdout).toBe('asked');
+  });
+
+  test('a run whose environment gives a variable as undefined leaves it out', async () => {
+    const script = 'process.stdout.write(JSON.stringify(Object.keys(process.env)))';
+
+    const ran = await runProcess(process.execPath, ['-e', script], {
+      env: { KEPT: 'yes', DROPPED: undefined },
+    });
+
+    expect(ran.stdout).toBe('["KEPT"]');
+  });
+
+  test('a run that must succeed gives its stdout when it exits with 0', async () => {
+    const stdout = await runForOutput(process.execPath, ['-e', "process.stdout.write('printed')"]);
+
+    expect(stdout).toBe('printed');
+  });
+
+  test('a run that must succeed rejects, naming its command line, the status and its stderr, when it exits with another status', async () => {
+    const script = "process.stderr.write('refused'); process.exitCode = 3";
+
+    const failure = await runForOutput(process.execPath, ['-e', script]).catch(
+      (error: unknown) => error,
+    );
+
+    expect(failure).toEqual(
+      new Error(`${process.execPath} -e ${script} ended with status 3: refused`),
+    );
+  });
+});
+
+describe('a run that does not exit by itself, through test-process.ts', () => {
+  test('a run a signal ends rejects, naming its command line, the signal and its stderr', async () => {
+    const script = "process.stderr.write('dying'); process.kill(process.pid, 'SIGKILL')";
+
+    const failure = await runProcess(process.execPath, ['-e', script]).catch(
+      (error: unknown) => error,
+    );
+
+    expect(failure).toEqual(
+      new Error(`${process.execPath} -e ${script} was ended by SIGKILL: dying`),
+    );
+  });
+
+  test('a character split across two chunks of stderr before a signal ends the run reads whole in the rejection', async () => {
+    const script = [
+      "const euro = Buffer.from('€');",
+      'process.stderr.write(euro.subarray(0, 1), () => {',
+      '  setTimeout(() => {',
+      "    process.stderr.write(euro.subarray(1), () => process.kill(process.pid, 'SIGKILL'));",
+      '  }, 50);',
+      '});',
+    ].join('\n');
+
+    const failure = await runProcess(process.execPath, ['-e', script]).catch(
+      (error: unknown) => error,
+    );
+
+    expect(failure).toEqual(new Error(`${process.execPath} -e ${script} was ended by SIGKILL: €`));
+  });
+
+  test('a run of a command that is not on PATH rejects with the message the test gave', async () => {
+    const notOnPath = 'cf-loom-no-such-command is not on PATH: install it';
+
+    const failure = await runProcess('cf-loom-no-such-command', [], { notOnPath }).catch(
+      (error: unknown) => error,
+    );
+
+    expect(failure).toEqual(new Error(notOnPath));
+  });
+
+  test('a run still going when its test times out is killed, and its command and stderr are in the test’s output', async () => {
+    const run = await runFixture('hung-run-in-test.fixture.ts', { moto_server: 'silent' });
+
+    expect(run.pids).toHaveLength(1);
+    expect(isRunning(run.pids[0]!)).toBe(false);
+    expect(run.output).toContain('moto_server was still running when its owner ended');
+    expect(run.output).toContain('warming up');
+  });
+
+  test('a run still going when its beforeAll times out is killed at the end of the file, and its command and stderr are in the output', async () => {
+    const run = await runFixture('hung-run-in-hook.fixture.ts', { 'nats-server': 'silent' });
+
+    expect(run.pids).toHaveLength(1);
+    expect(isRunning(run.pids[0]!)).toBe(false);
+    expect(run.output).toContain('nats-server was still running when its owner ended');
+    expect(run.output).toContain('warming up');
+  });
+
+  test('a run that exited writes no line about a run still going when its owner ends', async () => {
+    const run = await runFixture('finished-run.fixture.ts', {});
+
+    expect(run.passed).toBe(true);
+    expect(run.output).not.toContain('was still running');
   });
 });

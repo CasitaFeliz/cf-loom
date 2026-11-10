@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { glob } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -8,6 +7,7 @@ import { createVitest, type Vitest } from 'vitest/node';
 import { parse } from 'yaml';
 import { growthHeapMegabytes } from '../packages/contract/vitest.growth.config.ts';
 import { heavyHeapMegabytes } from '../packages/contract/vitest.heavy.config.ts';
+import { runForOutput } from '../packages/messaging/test/test-process.ts';
 import { lightHeapMegabytes } from '../vitest.config.ts';
 
 const root = join(import.meta.dirname, '..');
@@ -44,16 +44,17 @@ function startVitest(filters: readonly string[] = []): Promise<Vitest> {
 }
 
 /** The heap limit, in bytes, of a Node started with `--max-old-space-size` and no `NODE_OPTIONS`: what a test process of that budget must report. */
-function heapLimitOf(megabytes: number): number {
-  const { NODE_OPTIONS: _inherited, ...environment } = process.env;
-  const printed = execFileSync(
+async function heapLimitOf(megabytes: number): Promise<number> {
+  // biome-ignore lint/style/useNamingConvention: the name of an environment variable
+  const environment = { ...process.env, NODE_OPTIONS: undefined };
+  const printed = await runForOutput(
     process.execPath,
     [
       `--max-old-space-size=${megabytes}`,
       '-p',
       "require('node:v8').getHeapStatistics().heap_size_limit",
     ],
-    { encoding: 'utf8', env: environment },
+    { env: environment },
   );
   return Number(printed);
 }
@@ -394,15 +395,18 @@ describe('the memory classes of the test run', () => {
     const vitest = await startVitest();
     const directory = mkdtempSync(join(tmpdir(), 'memory-classes-'));
     try {
-      const lightLimit = heapLimitOf(lightHeapMegabytes);
+      const lightLimit = await heapLimitOf(lightHeapMegabytes);
       const wanted = Object.fromEntries(
-        vitest.projects.map(({ name }) => {
-          const memoryClass = classOfProject(name);
-          return [
-            name,
-            memoryClass === undefined ? lightLimit : heapLimitOf(memoryClasses[memoryClass]),
-          ];
-        }),
+        await Promise.all(
+          vitest.projects.map(async ({ name }) => {
+            const memoryClass = classOfProject(name);
+            const limit =
+              memoryClass === undefined
+                ? lightLimit
+                : await heapLimitOf(memoryClasses[memoryClass]);
+            return [name, limit];
+          }),
+        ),
       );
 
       const run = await runningInEveryProject(vitest, directory);
