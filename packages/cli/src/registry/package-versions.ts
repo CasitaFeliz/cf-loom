@@ -1,5 +1,5 @@
 import { type Failed, failed } from '../child-process/index.ts';
-import { jsonFromNpm, type NpmPlace, type Refused } from './npm.ts';
+import { jsonFromNpm, type NpmPlace, type Refused, viewedVersions } from './npm.ts';
 import { type Listing, type Versions, versionsFrom } from './versions.ts';
 
 /** npm's 404 for a package, before anything is known of why the registry lacks it. */
@@ -11,7 +11,7 @@ export async function versionsOf(
   packageName: string,
 ): Promise<Versions | NotFound | Failed> {
   const call = { label: `npm view ${packageName}`, args: ['view', packageName, 'versions'] };
-  const run = await jsonFromNpm(npm, call);
+  const run = await jsonFromNpm(npm, call, viewedVersions);
   switch (run.kind) {
     case 'json':
       return versionsFrom(packageName, run.value);

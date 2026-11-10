@@ -1,6 +1,6 @@
 import { packageNamePartsOf } from '@cf-loom/contract/internal';
 import { type Failed, failed, lineOf } from '../child-process/index.ts';
-import { jsonFromNpm, type NpmPlace, textFromNpm } from './npm.ts';
+import { jsonFromNpm, type NpmPlace, textFromNpm, userName } from './npm.ts';
 
 const registrySetting = 'npm_config_registry';
 const credentialsInUrl =
@@ -80,10 +80,10 @@ function isProtected(npmFailure: string): boolean {
 
 async function loginOn(npm: NpmPlace, registry: string): Promise<Login> {
   const call = { label: 'npm whoami', args: ['whoami'], env: { [registrySetting]: registry } };
-  const run = await jsonFromNpm(npm, call);
+  const run = await jsonFromNpm(npm, call, userName);
   switch (run.kind) {
     case 'json': {
-      const username = typeof run.value === 'string' ? lineOf(run.value) : '';
+      const username = lineOf(run.value);
       return username === ''
         ? { kind: 'refused', why: 'npm whoami printed no user name' }
         : { kind: 'user', username };

@@ -161,6 +161,9 @@ function strangersInProjects(
   return problems;
 }
 
+/** A `vitest run` as a step writes it: through `pnpm vitest`, or through `node` on Vitest's own file, as `cli-npm` does to keep pnpm's Node folder off its `PATH`. */
+const vitestRun = /\bvitest(?:\.mjs)? run\b/;
+
 /** A `vitest run` command: the `--project` filters it passes, and the `--shard` it passes, if any. */
 type Command = { readonly filters: readonly string[]; readonly shard: string | undefined };
 
@@ -179,8 +182,9 @@ function optionOf(
 function commandsIn(text: string, matrix: Readonly<Record<string, string>> = {}): Command[] {
   const commands: Command[] = [];
   for (const line of text.split('\n')) {
-    const command = line.match(/\bvitest run\b.*$/)?.[0];
-    if (command !== undefined) {
+    const at = line.search(vitestRun);
+    if (at !== -1) {
+      const command = line.slice(at);
       const filters = [...command.matchAll(/--project\s+(?:'([^']*)'|"([^"]*)"|(\S+))/g)];
       commands.push({
         filters: filters.map(([, single, double, bare]) => single ?? double ?? bare ?? ''),
@@ -189,6 +193,11 @@ function commandsIn(text: string, matrix: Readonly<Record<string, string>> = {})
     }
   }
   return commands;
+}
+
+/** A matrix value as text: a list entry that is itself a mapping, as `cli-npm`'s releases are, by its JSON. */
+function valueText(value: unknown): string {
+  return typeof value === 'object' ? JSON.stringify(value) : String(value);
 }
 
 /**
@@ -204,13 +213,13 @@ function combinationsOf(matrix: Readonly<Record<string, unknown>>): Record<strin
   let combinations: Record<string, string>[] = Object.keys(lists).length === 0 ? [] : [{}];
   for (const [key, values] of Object.entries(lists)) {
     combinations = combinations.flatMap((combination) =>
-      (values as unknown[]).map((value) => ({ ...combination, [key]: String(value) })),
+      (values as unknown[]).map((value) => ({ ...combination, [key]: valueText(value) })),
     );
   }
   const product = [...combinations];
   for (const entry of include as Record<string, unknown>[]) {
     const given = Object.fromEntries(
-      Object.entries(entry).map(([key, value]) => [key, String(value)]),
+      Object.entries(entry).map(([key, value]) => [key, valueText(value)]),
     );
     const extended = product.some((combination) =>
       Object.keys(lists).every((key) => !(key in given) || combination[key] === given[key]),
@@ -242,29 +251,50 @@ function runsFor(condition: unknown, matrix: Readonly<Record<string, string>>): 
   });
 }
 
-/** One job of `check`: the values of its matrix, and the `vitest run` commands of the steps that run for them. */
-type Leg = { readonly matrix: Readonly<Record<string, string>>; readonly commands: Command[] };
+/** One leg of a job of CI: the job's name, the values of its matrix, and the `vitest run` commands of the steps that run for them. */
+type Leg = {
+  readonly job: string;
+  readonly matrix: Readonly<Record<string, string>>;
+  readonly commands: Command[];
+};
 
-/** The legs of CI's `check` job: its matrix combinations, each with the commands of the steps whose `if` holds for it. */
-function legsOfCheck(workflow: string): Leg[] {
-  const { strategy, steps } = parse(workflow).jobs.check;
-  const vitestSteps = (steps as { if?: unknown; run?: unknown }[]).filter(
-    ({ run }) => typeof run === 'string' && /\bvitest run\b/.test(run),
-  );
-  return combinationsOf(strategy.matrix).map((matrix) => ({
-    matrix,
-    commands: vitestSteps
-      .filter((step) => runsFor(step.if, matrix))
-      .flatMap((step) => commandsIn(String(step.run), matrix)),
-  }));
+/** The jobs of a workflow, as far as this test reads them. */
+type Jobs = Record<
+  string,
+  { strategy?: { matrix: Record<string, unknown> }; steps: { if?: unknown; run?: unknown }[] }
+>;
+
+/** The legs of every job of CI that runs Vitest: the matrix combinations of each, with the commands of the steps whose `if` holds for it. */
+function legsOfCi(workflow: string): Leg[] {
+  const legs: Leg[] = [];
+  for (const [job, { strategy, steps }] of Object.entries(parse(workflow).jobs as Jobs)) {
+    const vitestSteps = steps.filter(({ run }) => typeof run === 'string' && vitestRun.test(run));
+    if (vitestSteps.length === 0) {
+      continue;
+    }
+    if (strategy?.matrix === undefined) {
+      throw new Error(`The job ${job} runs Vitest with no matrix, which this test does not read.`);
+    }
+    for (const matrix of combinationsOf(strategy.matrix)) {
+      const commands = vitestSteps
+        .filter((step) => runsFor(step.if, matrix))
+        .flatMap((step) => commandsIn(String(step.run), matrix));
+      legs.push({ job, matrix, commands });
+    }
+  }
+  return legs;
 }
 
-/** The legs that run one class together, by their matrix without its `shard`: one leg alone, or the shards of one run. */
-function groupedByClass(legs: readonly Leg[]): Map<string, Leg[]> {
+/**
+ * The legs of the same job that match but for the matrix keys of `apart`, together: the legs of one run when `apart` is `shard`,
+ * which splits a run among legs, and those of one class when it is `shard` and `npm`, which repeats a run for each npm release.
+ */
+function groupedWithout(legs: readonly Leg[], apart: readonly string[]): Map<string, Leg[]> {
   const groups = new Map<string, Leg[]>();
   for (const leg of legs) {
-    const { shard: _shard, ...rest } = leg.matrix;
-    const key = JSON.stringify(rest);
+    const matrix = Object.entries(leg.matrix).filter(([key]) => !apart.includes(key));
+    const key =
+      matrix.length === 0 ? leg.job : `${leg.job} ${JSON.stringify(Object.fromEntries(matrix))}`;
     groups.set(key, [...(groups.get(key) ?? []), leg]);
   }
   return groups;
@@ -289,6 +319,42 @@ function legProblems(key: string, group: readonly Leg[]): string[] {
     );
   }
   return problems;
+}
+
+/** What is wrong with the legs of one class: they do not all run the same `--project` filters. */
+function differentFilters(key: string, group: readonly Leg[]): string[] {
+  const filtersOfLegs = group.map(({ commands }) =>
+    JSON.stringify(commands.map(({ filters }) => filters)),
+  );
+  const distinct = [...new Set(filtersOfLegs)];
+  return distinct.length === 1
+    ? []
+    : [`the legs of ${key} run different --project filters: ${distinct.join(' and ')}`];
+}
+
+/** What CI's legs hold: what is wrong with how the workflow writes them, and the `--project` filters each class of legs runs. */
+type ClassesOfCi = {
+  readonly problems: string[];
+  readonly filtersOfClasses: (readonly (readonly string[])[])[];
+};
+
+/** The classes of CI's legs, read from the workflow's text. */
+function classesOfCi(workflow: string): ClassesOfCi {
+  const problems: string[] = [];
+  const filtersOfClasses: ClassesOfCi['filtersOfClasses'] = [];
+  const legs = legsOfCi(workflow);
+  for (const [key, run] of groupedWithout(legs, ['shard'])) {
+    for (const problem of legProblems(key, run)) {
+      problems.push(problem);
+    }
+  }
+  for (const [key, group] of groupedWithout(legs, ['shard', 'npm'])) {
+    for (const problem of differentFilters(key, group)) {
+      problems.push(problem);
+    }
+    filtersOfClasses.push(group.flatMap(({ commands }) => commands.map(({ filters }) => filters)));
+  }
+  return { problems, filtersOfClasses };
 }
 
 /** The names of the projects each list of `--project` filters selects. */
@@ -393,16 +459,10 @@ describe('the memory classes of the test run', () => {
       const { scripts } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
       const missing = ['test', 'test:growth'].filter((name) => typeof scripts[name] !== 'string');
 
-      const groups = groupedByClass(legsOfCheck(workflow));
+      const { problems, filtersOfClasses } = classesOfCi(workflow);
       const classes: string[][] = [];
-      const problems: string[] = [];
-      for (const [key, group] of groups) {
-        for (const problem of legProblems(key, group)) {
-          problems.push(problem);
-        }
-        const selected = await projectsSelectedBy(
-          group.flatMap(({ commands }) => commands.map(({ filters }) => filters)),
-        );
+      for (const filters of filtersOfClasses) {
+        const selected = await projectsSelectedBy(filters);
         classes.push([...new Set(selected.flat())]);
       }
       const local = await projectsSelectedBy(
@@ -418,5 +478,68 @@ describe('the memory classes of the test run', () => {
     } finally {
       await vitest.close();
     }
+  });
+});
+
+const cliNpmWorkflow = (cliNpmJob: string) => `jobs:
+  check:
+    strategy:
+      matrix:
+        memory: [light]
+    steps:
+      - run: pnpm vitest run --project '!@cf-loom/cli'
+${cliNpmJob}`;
+
+describe("the classes of CI's legs", () => {
+  test('the legs of a job that runs the same project for each npm release are one class', () => {
+    const workflow = cliNpmWorkflow(`  cli-npm:
+    strategy:
+      matrix:
+        npm:
+          - version: 11.13.0
+            sha256: aa
+          - version: 12.2.1
+            sha256: bb
+    steps:
+      - run: node node_modules/vitest/vitest.mjs run --project @cf-loom/cli
+`);
+
+    const { problems, filtersOfClasses } = classesOfCi(workflow);
+
+    expect(problems).toEqual([]);
+    expect(filtersOfClasses).toEqual([[['!@cf-loom/cli']], [['@cf-loom/cli'], ['@cf-loom/cli']]]);
+  });
+
+  test('a leg of a job that runs another project for one npm release than for the others is a problem', () => {
+    const workflow = cliNpmWorkflow(`  cli-npm:
+    strategy:
+      matrix:
+        npm: [11.13.0, 12.2.1]
+    steps:
+      - if: matrix.npm == '11.13.0'
+        run: node node_modules/vitest/vitest.mjs run --project @cf-loom/cli
+      - if: matrix.npm == '12.2.1'
+        run: node node_modules/vitest/vitest.mjs run --project @cf-loom/contract
+`);
+
+    const { problems } = classesOfCi(workflow);
+
+    expect(problems).toEqual([
+      'the legs of cli-npm run different --project filters: [["@cf-loom/cli"]] and [["@cf-loom/contract"]]',
+    ]);
+  });
+
+  test('a job that runs Vitest with no matrix is refused, since its legs would not be read', () => {
+    const workflow = `jobs:
+  light:
+    steps:
+      - run: pnpm vitest run
+`;
+
+    const reading = () => classesOfCi(workflow);
+
+    expect(reading).toThrow(
+      'The job light runs Vitest with no matrix, which this test does not read.',
+    );
   });
 });

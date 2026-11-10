@@ -98,8 +98,55 @@ jobs:
       - if: matrix.memory == 'light'
         run: node scripts/check-expect-errors.ts
       - if: matrix.memory == 'light'
-        run: pnpm vitest run --project '!*-heavy' --project '!*-growth'
+        run: pnpm vitest run --project '!*-heavy' --project '!*-growth' --project '!@cf-loom/cli'
       - if: matrix.memory == 'heavy'
         run: pnpm vitest run --project '*-heavy'
       - if: matrix.memory == 'growth'
         run: pnpm vitest run --project '*-growth' --shard='${{ matrix.shard }}'
+  # The CLI reads and publishes through the npm on PATH (packages/cli/ARCHITECTURE.md): its tests run once for each npm
+  # release this matrix pins, whose carets are engines.npm of @cf-loom/cli; scripts/npm-releases.test.ts checks that
+  # they agree.
+  # pnpm puts Node's own folder, with the npm it bundles, first on PATH, so Vitest is started with node.
+  # The root vitest.config.ts gives its test processes the light heap, as it does the check job's.
+  cli-npm:
+    name: cli-npm (npm ${{ matrix.npm.version }})
+    runs-on: orb
+    strategy:
+      fail-fast: false
+      matrix:
+        npm:
+          - version: 11.13.0
+            sha256: a4ffa1de3bf1c7f9d5e3dd24fe2921970bdb1589d647f4083eaaaab3be974b7e
+          - version: 12.2.1
+            sha256: 228bd64aaef23270dbdbd2cf3d5ef5c467602ef38c4066246cef1984adab9a67
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install npm ${{ matrix.npm.version }}
+        env:
+          NPM_VERSION: ${{ matrix.npm.version }}
+          NPM_SHA256: ${{ matrix.npm.sha256 }}
+        run: |
+          archive="npm-${NPM_VERSION}.tgz"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" "https://registry.npmjs.org/npm/-/$archive"
+          echo "${NPM_SHA256}  $RUNNER_TEMP/$archive" | sha256sum --check --strict
+          mkdir "$RUNNER_TEMP/npm"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/npm"
+          mkdir "$RUNNER_TEMP/npm-bin"
+          ln -s "$RUNNER_TEMP/npm/package/bin/npm-cli.js" "$RUNNER_TEMP/npm-bin/npm"
+          echo "$RUNNER_TEMP/npm-bin" >> "$GITHUB_PATH"
+      - name: Check that the npm first on PATH is npm ${{ matrix.npm.version }}
+        env:
+          NPM_VERSION: ${{ matrix.npm.version }}
+        run: |
+          found="$(npm -v)"
+          test "$found" = "$NPM_VERSION" || { echo "npm on PATH is $found, not $NPM_VERSION" >&2; exit 1; }
+      - run: pnpm build
+      - run: node node_modules/vitest/vitest.mjs run --project @cf-loom/cli

@@ -173,7 +173,8 @@ function answerOf({ method, path, accept, body }: Asked, state: State, url: stri
  */
 export async function aRegistry(options: RegistryOptions = {}): Promise<Registry> {
   const requests: Recorded[] = [];
-  const state: State = { options, packages: { ...options.packages }, published: [] };
+  const packages = Object.assign(Object.create(null), options.packages);
+  const state: State = { options, packages, published: [] };
   const server = createServer((request, response) => {
     const method = request.method ?? '';
     const path = request.url ?? '';
