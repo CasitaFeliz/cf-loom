@@ -1,8 +1,8 @@
-import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { runProcess } from '../packages/messaging/test/test-process.ts';
 import { bumpProblem, type ChangesetStatus } from './check-changeset-bump.ts';
 
 const statusDirs: string[] = [];
@@ -13,19 +13,19 @@ function aStatusWith(bumps: Record<string, 'major' | 'minor' | 'patch' | 'none'>
   };
 }
 
-function runCheck(
+async function runCheck(
   title: string,
   status: ChangesetStatus,
-): { status: number | null; stderr: string } {
+): Promise<{ status: number; stderr: string }> {
   const statusDir = mkdtempSync(join(tmpdir(), 'check-changeset-bump-'));
   statusDirs.push(statusDir);
   const statusPath = join(statusDir, 'status.json');
   writeFileSync(statusPath, JSON.stringify(status));
-  const run = spawnSync(
-    'node',
-    [join(import.meta.dirname, 'check-changeset-bump.ts'), title, statusPath],
-    { encoding: 'utf8' },
-  );
+  const run = await runProcess('node', [
+    join(import.meta.dirname, 'check-changeset-bump.ts'),
+    title,
+    statusPath,
+  ]);
   return { status: run.status, stderr: run.stderr };
 }
 
@@ -116,14 +116,14 @@ describe('bumpProblem', () => {
 });
 
 describe('check-changeset-bump', () => {
-  it('exits 0 when the changesets agree with the title', () => {
-    const run = runCheck('feat!: a break', aStatusWith({ 'a-break': 'major' }));
+  it('exits 0 when the changesets agree with the title', async () => {
+    const run = await runCheck('feat!: a break', aStatusWith({ 'a-break': 'major' }));
 
     expect(run).toEqual({ status: 0, stderr: '' });
   });
 
-  it('exits 1 and says why when they disagree', () => {
-    const run = runCheck('fix: a typo', aStatusWith({ 'a-break': 'major' }));
+  it('exits 1 and says why when they disagree', async () => {
+    const run = await runCheck('fix: a typo', aStatusWith({ 'a-break': 'major' }));
 
     expect(run).toEqual({
       status: 1,
@@ -132,10 +132,8 @@ describe('check-changeset-bump', () => {
     });
   });
 
-  it('exits 1 when it is not given the title and the status file', () => {
-    const run = spawnSync('node', [join(import.meta.dirname, 'check-changeset-bump.ts')], {
-      encoding: 'utf8',
-    });
+  it('exits 1 when it is not given the title and the status file', async () => {
+    const run = await runProcess('node', [join(import.meta.dirname, 'check-changeset-bump.ts')]);
 
     expect(run.status).toBe(1);
   });

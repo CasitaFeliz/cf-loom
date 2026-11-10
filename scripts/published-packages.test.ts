@@ -1,8 +1,8 @@
-import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import { builtinModules } from 'node:module';
 import { join, posix, relative } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { runProcess } from '../packages/messaging/test/test-process.ts';
 import { targetsOf } from './package-entries.ts';
 
 type WorkspacePackage = { readonly name: string; readonly path: string; readonly private: boolean };
@@ -17,16 +17,20 @@ type PackedPackage = {
 const root = join(import.meta.dirname, '..');
 
 /** Runs the `pnpm` on `PATH`, which must be the version `packageManager` names, or pnpm fetches that one. */
-function pnpm(args: string[], cwd: string): string {
-  return execFileSync('pnpm', args, { cwd, encoding: 'utf8' });
+async function pnpm(args: string[], cwd: string): Promise<string> {
+  const ran = await runProcess('pnpm', args, { cwd });
+  if (ran.status !== 0) {
+    throw new Error(`pnpm ${args.join(' ')} ended with status ${ran.status}: ${ran.stderr}`);
+  }
+  return ran.stdout;
 }
 
-function workspacePackages(): WorkspacePackage[] {
-  return JSON.parse(pnpm(['ls', '-r', '--depth', '-1', '--json'], root));
+async function workspacePackages(): Promise<WorkspacePackage[]> {
+  return JSON.parse(await pnpm(['ls', '-r', '--depth', '-1', '--json'], root));
 }
 
-function packed({ name, path }: WorkspacePackage): PackedPackage {
-  const { files } = JSON.parse(pnpm(['pack', '--dry-run', '--json'], path));
+async function packed({ name, path }: WorkspacePackage): Promise<PackedPackage> {
+  const { files } = JSON.parse(await pnpm(['pack', '--dry-run', '--json'], path));
   return {
     name,
     path,
@@ -88,8 +92,8 @@ function importedPackagesOf(packageDir: string, self: string): Set<string> {
 }
 
 describe('the packages pnpm publishes', () => {
-  it('are the ones under packages/, named @cf-loom/<folder>, and no other workspace package', () => {
-    const published = workspacePackages()
+  it('are the ones under packages/, named @cf-loom/<folder>, and no other workspace package', async () => {
+    const published = (await workspacePackages())
       .filter((workspacePackage) => !workspacePackage.private)
       .map(({ name, path }) => ({ path: relative(root, path), name }));
     const expected = readdirSync(join(root, 'packages')).map((folder) => ({
@@ -103,9 +107,14 @@ describe('the packages pnpm publishes', () => {
   describe('each @cf-loom package', () => {
     let packages: PackedPackage[];
 
-    beforeAll(() => {
-      const published = workspacePackages().filter((workspacePackage) => !workspacePackage.private);
-      packages = published.map(packed);
+    beforeAll(async () => {
+      const published = (await workspacePackages()).filter(
+        (workspacePackage) => !workspacePackage.private,
+      );
+      packages = [];
+      for (const workspacePackage of published) {
+        packages.push(await packed(workspacePackage));
+      }
     });
 
     it('packs every file its exports and bin point at', () => {

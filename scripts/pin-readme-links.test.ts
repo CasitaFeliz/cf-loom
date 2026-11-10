@@ -1,4 +1,3 @@
-import { spawnSync } from 'node:child_process';
 import {
   mkdirSync,
   mkdtempSync,
@@ -11,6 +10,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { runProcess } from '../packages/messaging/test/test-process.ts';
 import { repositoryOf } from './pin-readme-links.ts';
 
 const repository = 'CasitaFeliz/cf-loom';
@@ -48,9 +48,12 @@ function manifestOf(url: string): string {
   return JSON.stringify({ repository: { type: 'git', url } });
 }
 
-function runPin(checkout: string, ...args: string[]): { status: number | null; stderr: string } {
+async function runPin(
+  checkout: string,
+  ...args: string[]
+): Promise<{ status: number; stderr: string }> {
   const script = join(import.meta.dirname, 'pin-readme-links.ts');
-  const run = spawnSync('node', [script, ...args], { cwd: checkout, encoding: 'utf8' });
+  const run = await runProcess('node', [script, ...args], { cwd: checkout });
   return { status: run.status, stderr: run.stderr };
 }
 
@@ -97,7 +100,7 @@ describe('repositoryOf', () => {
 });
 
 describe('pin-readme-links', () => {
-  it('pins each package README with its own repository and leaves every other file as it is', () => {
+  it('pins each package README with its own repository and leaves every other file as it is', async () => {
     const own = 'git+https://github.com/CasitaFeliz/cf-loom.git';
     const checkout = aCheckoutWith({
       'README.md': `[root](${atMain}/CONTEXT.md)`,
@@ -110,7 +113,7 @@ describe('pin-readme-links', () => {
     });
     const before = filesOf(checkout);
 
-    const run = runPin(checkout, commit);
+    const run = await runPin(checkout, commit);
 
     expect(run).toEqual({ status: 0, stderr: '' });
     expect(filesOf(checkout)).toEqual({
@@ -120,7 +123,7 @@ describe('pin-readme-links', () => {
     });
   });
 
-  it('prints the file and line of each README it refuses and writes none', () => {
+  it('prints the file and line of each README it refuses and writes none', async () => {
     const own = manifestOf('git+https://github.com/CasitaFeliz/cf-loom.git');
     const checkout = aCheckoutWith({
       'packages/a/package.json': own,
@@ -132,7 +135,7 @@ describe('pin-readme-links', () => {
     });
     const before = filesOf(checkout);
 
-    const run = runPin(checkout, commit);
+    const run = await runPin(checkout, commit);
 
     expect(run.status).toBe(1);
     expect(run.stderr).toContain('packages/b/README.md: line 1: ');
@@ -141,7 +144,7 @@ describe('pin-readme-links', () => {
     expect(filesOf(checkout)).toEqual(before);
   });
 
-  it('prints the manifest of a package that declares no GitHub repository and writes none', () => {
+  it('prints the manifest of a package that declares no GitHub repository and writes none', async () => {
     const checkout = aCheckoutWith({
       'packages/a/package.json': manifestOf('git+https://github.com/CasitaFeliz/cf-loom.git'),
       'packages/a/README.md': `[a](${atMain}/CONTEXT.md)`,
@@ -150,14 +153,14 @@ describe('pin-readme-links', () => {
     });
     const before = filesOf(checkout);
 
-    const run = runPin(checkout, commit);
+    const run = await runPin(checkout, commit);
 
     expect(run.status).toBe(1);
     expect(run.stderr).toContain('packages/b/package.json: repository.url must be ');
     expect(filesOf(checkout)).toEqual(before);
   });
 
-  it('fails and writes nothing when a manifest is not JSON', () => {
+  it('fails and writes nothing when a manifest is not JSON', async () => {
     const checkout = aCheckoutWith({
       'packages/a/package.json': manifestOf('git+https://github.com/CasitaFeliz/cf-loom.git'),
       'packages/a/README.md': `[a](${atMain}/CONTEXT.md)`,
@@ -166,7 +169,7 @@ describe('pin-readme-links', () => {
     });
     const before = filesOf(checkout);
 
-    const run = runPin(checkout, commit);
+    const run = await runPin(checkout, commit);
 
     expect(run.status).toBe(1);
     expect(run.stderr).toContain('SyntaxError');
@@ -182,14 +185,14 @@ describe('pin-readme-links', () => {
     ['41 digits', [`${commit}0`]],
     ['not hexadecimal', [`${commit.slice(1)}g`]],
     ['a branch name', ['main']],
-  ])('prints its usage and writes nothing when the commit is %s', (_case, args) => {
+  ])('prints its usage and writes nothing when the commit is %s', async (_case, args) => {
     const checkout = aCheckoutWith({
       'packages/a/package.json': manifestOf('git+https://github.com/CasitaFeliz/cf-loom.git'),
       'packages/a/README.md': `[a](${atMain}/CONTEXT.md)`,
     });
     const before = filesOf(checkout);
 
-    const run = runPin(checkout, ...args);
+    const run = await runPin(checkout, ...args);
 
     expect(run.status).toBe(1);
     expect(run.stderr).toMatch(/^usage: node scripts\/pin-readme-links\.ts <commit>/);
@@ -204,7 +207,7 @@ describe('the package READMEs', () => {
     return text.split(needle).length - 1;
   }
 
-  it('are all pinned to a commit by the command, with none of their links left at main', () => {
+  it('are all pinned to a commit by the command, with none of their links left at main', async () => {
     const copied: Record<string, string> = {};
     const linksByFolder: Record<string, number> = {};
     for (const folder of readdirSync(packages)) {
@@ -216,7 +219,7 @@ describe('the package READMEs', () => {
     }
     const checkout = aCheckoutWith(copied);
 
-    const run = runPin(checkout, commit);
+    const run = await runPin(checkout, commit);
 
     const written = filesOf(checkout);
     const atCommit: Record<string, number> = {};
