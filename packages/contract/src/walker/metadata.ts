@@ -134,7 +134,8 @@ function isRefusal(refusal: Refused | undefined): refusal is Refused {
   return refusal !== undefined;
 }
 
-function idRefusalOf(id: unknown): Refused | undefined {
+/** Why the walk refuses an id, or `undefined` when it accepts it: a refused id is renamed by its fix. */
+export function idRefusalOf(id: unknown): Refused | undefined {
   if (id === undefined) {
     return undefined;
   }

@@ -124,7 +124,7 @@ export function validateRoot(root: Root, rootPackage: RootPackage): ValidatedRoo
   const slots = schemaSlotsOf(declarations);
   const walked = walkMeetingSchemas(locatedSchemasOf(slots.slots), schemaOriginsOf(packages));
   const nodes = nodesOf(slots.slots, walked);
-  const opened = openCompositionsOf(walked.compositions, walked.defs);
+  const opened = openCompositionsOf(walked.compositions, walked.judgedDefs);
   const refusals = [...opened, ...refusalsAt(walked.located)];
   const failures = [
     ...declarationFailures(declarations),
@@ -170,7 +170,7 @@ function declarationFailures(declarations: Declarations): readonly DeclarationFa
   ];
 }
 
-/** The rules that read the walked nodes, judged on every schema that walked. */
+/** The rules that read the walked nodes, judged on the outline of every schema, a failed one's too. */
 function schemaFailures(declarations: Declarations, nodes: Nodes): readonly DeclarationFailure[] {
   return [
     ...declarations.endpoints.flatMap((endpoint) => paramsFailures(endpoint, nodes)),

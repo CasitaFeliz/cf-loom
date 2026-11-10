@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 import { refusalsOf } from '../../test/failures.ts';
+import { orderOf, orders } from '../../test/growth.ts';
 import { openEnum } from '../index.ts';
 import { type SchemaNode, walkSchemas } from '../internal/index.ts';
 
@@ -203,6 +204,32 @@ describe('walkSchemas: discriminated unions', () => {
     );
   });
 
+  test('a variant whose discriminator has several values and a date tells both', () => {
+    const either = z.object({ type: z.literal(['card', 'debit']), placedAt: z.date() });
+
+    expect(walkBody(z.discriminatedUnion('type', [either, transfer]))).toEqual({
+      located: [
+        {
+          kind: 'not-allowed',
+          failures: [
+            {
+              kind: 'not-allowed',
+              at: '<|0>',
+              construct: 'a discriminated union variant whose discriminator has several values',
+            },
+            {
+              kind: 'not-allowed',
+              at: '<|0>.placedAt',
+              construct: 'z.date()',
+              instead: 'z.iso.datetime()',
+            },
+          ],
+        },
+      ],
+      defs: {},
+    });
+  });
+
   test('a discriminated union variant whose discriminator is a number is allowed', () => {
     const numbered = z.object({ type: z.literal(1) });
 
@@ -344,6 +371,35 @@ describe('walkSchemas: discriminated unions', () => {
     expect(walkBody(z.discriminatedUnion('type', variants))).toEqual(
       refusedAt('<|1>', 'a discriminated union variant that is not an object'),
     );
+  });
+});
+
+describe('walkSchemas: a discriminated union of many variants that fail', () => {
+  const sizes = { small: 500, large: 4_000 };
+
+  /** A walk of a discriminated union of `count` variants, each holding a date, built outside the time. */
+  const walkOfVariants = (count: number) => {
+    const variants = Array.from({ length: count }, (_, index) =>
+      z.object({ type: z.literal(`v${index}`), placedAt: z.date() }),
+    );
+    const schema = z.discriminatedUnion('type', variants as unknown as [(typeof variants)[number]]);
+    const at = {
+      site: { kind: 'export', name: 'body' },
+      declaration: undefined,
+      steps: undefined,
+    } as const;
+    return () => walkSchemas([{ at, schema }], () => undefined);
+  };
+
+  test('is walked in time that grows with the variants, each told with its date', () => {
+    const walked = walkOfVariants(sizes.large)();
+    const order = orderOf(walkOfVariants, sizes, orders.linear);
+
+    const [located] = refusalsOf(walked).located;
+    expect(located !== undefined && 'failures' in located ? located.failures.length : 0).toBe(
+      sizes.large,
+    );
+    expect(order).toBeLessThan(orders.linear);
   });
 });
 

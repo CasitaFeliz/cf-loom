@@ -31,6 +31,7 @@ export const chainStages = {
   ownRejectionsOf: { reason: 'reads the codes an Endpoint lists, never a def: a count' },
   brokerPlanOf: { reason: 'reads Messages and Subscriptions, never a def: a count' },
   isRemoved: { reason: 'reads one code’s mark' },
+  isWhole: { reason: 'reads one outline’s mark: constant' },
   isEmptyTextPart: { reason: 'reads one node’s fields: a width' },
   textPartNodesOf: { reason: 'reads one Endpoint’s text parts, never a def: a width' },
   textPartsOf: { reason: 'reads one Request’s text parts, never a def: a width' },
