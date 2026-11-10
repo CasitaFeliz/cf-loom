@@ -1711,7 +1711,7 @@ describe('cf-loom openapi: what it refuses', () => {
       status: 3,
       stdout: '',
       stderr:
-        'DELETE /orders/{} and GET /orders/{} name path param 1 id and orderId: an OpenAPI path names it once, so rename one\n',
+        '"DELETE /orders/{}" and "GET /orders/{}" name path param 1 id and orderId: an OpenAPI path names it once, so rename one\n',
     });
   });
 

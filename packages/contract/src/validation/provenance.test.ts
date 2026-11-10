@@ -19,6 +19,7 @@ import {
 } from '../index.ts';
 import {
   type ImportedDefinitions,
+  noVersionLineOf,
   type Root,
   type Snapshot,
   snapshotOf,
@@ -293,6 +294,12 @@ describe('validateRoot and snapshotOf: where a reached declaration came from', (
         },
       ],
     });
+  });
+
+  test('the line saying a package has no version writes its name as one item', () => {
+    const line = noVersionLineOf('a, b');
+
+    expect(line).toBe('"a, b" has no version in its package.json');
   });
 
   test('two packages whose names hold a comma are each one item of the list naming both', () => {

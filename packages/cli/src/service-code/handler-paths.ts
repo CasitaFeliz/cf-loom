@@ -1,5 +1,5 @@
 import type { ServiceSnapshot } from '@cf-loom/contract/internal';
-import { kebabCaseOf, messageIdentityOf } from '@cf-loom/contract/internal';
+import { joinedOf, kebabCaseOf, messageIdentityOf, wordOf } from '@cf-loom/contract/internal';
 import {
   configFile,
   filledPathOf,
@@ -184,11 +184,14 @@ function collidingLineOf(paths: readonly HandlerPath[], directory: string): stri
 
 /** Two declarations at one Handler file: at one path, or at two paths a link makes one file. */
 function bothLineOf(earlier: HandlerPath, later: HandlerPath): string {
-  const both = `${handledLabelOf(earlier.handled)} and ${handledLabelOf(later.handled)}`;
+  const both = joinedOf(
+    [wordOf(handledLabelOf(earlier.handled)), wordOf(handledLabelOf(later.handled))],
+    'and',
+  );
   if (earlier.path === later.path) {
-    return `${both} are both ${later.path}`;
+    return `${both} are both ${wordOf(later.path)}`;
   }
-  return `${both} are both the same file, ${earlier.path} and ${later.path}`;
+  return `${both} are both the same file, ${joinedOf([wordOf(earlier.path), wordOf(later.path)], 'and')}`;
 }
 
 /** A declaration as the lines name it: `endpoints.getOrder`, `commands.ChargeCard@1`. */

@@ -1039,7 +1039,7 @@ describe('an Endpoint’s exported Snapshot cut, read when the client is created
     });
 
     expect(creating(damaged)).toThrow(
-      "orders-service's exported Snapshot is malformed: endpoints.GET /shops/{}/orders.name is missing",
+      `orders-service's exported Snapshot is malformed: endpoints."GET /shops/{}/orders".name is missing`,
     );
   });
 

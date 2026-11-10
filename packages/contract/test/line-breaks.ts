@@ -16,6 +16,19 @@ export const lineBreaks = [
   ['U+001E', 0x1e, '\\u001e'],
 ] as const;
 
+/**
+ * A text holding line breaks as a line writes it as one item: as JSON, so a break JSON escapes is
+ * that escape, and each break it leaves as it is, the visible text of its escape; spelled here on
+ * purpose, apart from the code under test.
+ */
+export function quotedItemOf(text: string): string {
+  let written = JSON.stringify(text);
+  for (const [, code, visible] of lineBreaks) {
+    written = written.replaceAll(String.fromCharCode(code), visible);
+  }
+  return written;
+}
+
 /** Splits a text where any reader would end a line. */
 export const lineBreakPattern = new RegExp(
   `[${lineBreaks.map(([, code]) => String.fromCharCode(code)).join('')}]`,

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { orderOf, orders } from '../../test/growth.ts';
-import { lineBreaks, lineBreaksIn } from '../../test/line-breaks.ts';
+import { lineBreaks, lineBreaksIn, quotedItemOf } from '../../test/line-breaks.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import type { Issue } from '../index.ts';
 import { issueLineOf, listedIssueLinesOf, unbrokenLineOf } from '../internal/index.ts';
@@ -156,14 +156,15 @@ describe('listedIssueLinesOf: the size', () => {
 describe('listedIssueLinesOf: a line stays a line', () => {
   test.for(lineBreaks)(
     'a key holding %s is listed on one line, quoted, with the visible text of its escape',
-    ([, code, visible]) => {
+    ([, code]) => {
       const character = String.fromCharCode(code);
       const issue = anIssue({ path: [`a${character}b`] });
 
       const lines = listedIssueLinesOf(source, [issue]);
 
-      const key = JSON.stringify(`a${character}b`).replaceAll(character, visible);
-      expect(lines).toEqual([`${source}: body.${key} invalid_type: Expected string`]);
+      expect(lines).toEqual([
+        `${source}: body.${quotedItemOf(`a${character}b`)} invalid_type: Expected string`,
+      ]);
       expect(lineBreaksIn(lines.join(''))).toBe(0);
     },
   );

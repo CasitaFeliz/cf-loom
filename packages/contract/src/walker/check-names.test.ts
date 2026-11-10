@@ -321,6 +321,37 @@ describe('a refused zod check', () => {
     expect(constructsOf(checked(z.string(), check))).toEqual([construct]);
   });
 
+  test.for([
+    ['z.guid()', z.guid()],
+    ['z.uuid()', z.uuid()],
+    ['z.email()', z.email()],
+    ['z.url() or z.httpUrl()', z.url()],
+    ['z.emoji()', z.emoji()],
+    ['z.nanoid()', z.nanoid()],
+    ['z.cuid()', z.cuid()],
+    ['z.cuid2()', z.cuid2()],
+    ['z.ulid()', z.ulid()],
+    ['z.xid()', z.xid()],
+    ['z.ksuid()', z.ksuid()],
+    ['z.iso.datetime()', z.iso.datetime()],
+    ['z.iso.date()', z.iso.date()],
+    ['z.iso.time()', z.iso.time()],
+    ['z.iso.duration()', z.iso.duration()],
+    ['z.ipv4()', z.ipv4()],
+    ['z.ipv6()', z.ipv6()],
+    ['z.mac()', z.mac()],
+    ['z.cidrv4()', z.cidrv4()],
+    ['z.cidrv6()', z.cidrv6()],
+    ['z.base64()', z.base64()],
+    ['z.base64url()', z.base64url()],
+    ['z.e164()', z.e164()],
+    ['z.creditCard()', z.creditCard()],
+    ['z.iban()', z.iban()],
+    ['z.jwt()', z.jwt()],
+  ] as const)('a format zod builds from options is named %s', ([construct, check]) => {
+    expect(constructsOf(onBoolean(check))).toEqual([construct]);
+  });
+
   const regexBuiltFormats: readonly (readonly [string, string])[] = [
     ['hex', 'z.hex()'],
     ['hostname', 'z.hostname()'],
