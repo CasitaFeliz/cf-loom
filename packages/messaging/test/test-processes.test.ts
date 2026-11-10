@@ -267,4 +267,13 @@ describe('a run that does not exit by itself, through test-process.ts', () => {
     expect(run.output).toContain('moto_server was still running when its owner ended');
     expect(run.output).toContain('warming up');
   });
+
+  test('a run still going when its beforeAll times out is killed at the end of the file, and its command and stderr are in the output', async () => {
+    const run = await runFixture('hung-run-in-hook.fixture.ts', { 'nats-server': 'silent' });
+
+    expect(run.pids).toHaveLength(1);
+    expect(isRunning(run.pids[0]!)).toBe(false);
+    expect(run.output).toContain('nats-server was still running when its owner ended');
+    expect(run.output).toContain('warming up');
+  });
 });
