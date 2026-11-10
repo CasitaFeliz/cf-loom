@@ -2144,3 +2144,104 @@ describe('baselineOf and what npm prints', () => {
     },
   );
 });
+
+/** An npm that answers `view` with the 404 whose summary is given, and `whoami` with a user, writing the registry each `whoami` was pointed at to the log it returns. */
+function aNpmThatRefuses404(lab: Lab, summary: string) {
+  const folder = lab.aFolder();
+  const refusal = join(folder, 'view.json');
+  const log = join(folder, 'whoami.log');
+  writeFileSync(refusal, JSON.stringify({ error: { code: 'E404', summary } }));
+  const body = `case "$1" in\nview) cat '${refusal}'; exit 1;;\nwhoami) echo "$npm_config_registry" >> '${log}'; echo '"tester"';;\nesac`;
+  const place = lab.aPlace({ path: aStubNpm(lab, body) });
+  const asked = () =>
+    existsSync(log) ? readFileSync(log, 'utf8').split('\n').filter(Boolean) : [];
+  return { place, asked };
+}
+
+describe.concurrent('baselineOf and the 404 npm prints', () => {
+  const scoped = '@org%2fcontract-orders-service';
+
+  test.for([
+    [
+      'a one-word reason phrase',
+      `Gone - GET http://registry.test/${scoped}`,
+      'http://registry.test/',
+    ],
+    [
+      'a reason phrase of several words',
+      `Package Is Not Here - GET http://registry.test/${scoped}`,
+      'http://registry.test/',
+    ],
+    [
+      'a detail that names a second URL with the package’s path',
+      `Not Found - GET http://first.test/${scoped} - GET http://second.test/${scoped}`,
+      'http://first.test/',
+    ],
+    [
+      'a redirect target',
+      `Not Found - GET http://other.test/proj/${scoped} - Not found`,
+      'http://other.test/proj/',
+    ],
+  ] as const)(
+    'a 404 summary with %s is settled on the URL after its first GET',
+    async ([, summary, registry], { lab }) => {
+      const { place, asked } = aNpmThatRefuses404(lab, summary);
+
+      const read = await baselineOf(place, {
+        packageName: ordersPackage,
+        declared: orders,
+        against: undefined,
+      });
+
+      expect(read).toMatchObject({
+        baseline: { kind: 'unknown-package', registry, username: 'tester' },
+      });
+      expect(asked()).toEqual([registry]);
+    },
+  );
+
+  test.for([
+    ['no GET', 'Not Found'],
+    [
+      'a URL whose last segment is another name',
+      'Not Found - GET http://registry.test/@org%2fother',
+    ],
+    [
+      'a URL whose last segment has a malformed % escape',
+      'Not Found - GET http://registry.test/%E0%A4%A',
+    ],
+  ] as const)(
+    'a 404 summary with %s fails, naming no registry, and npm whoami is not asked',
+    async ([, summary], { lab }) => {
+      const { place, asked } = aNpmThatRefuses404(lab, summary);
+
+      const read = await baselineOf(place, {
+        packageName: ordersPackage,
+        declared: orders,
+        against: undefined,
+      });
+
+      expect(failureIn(read)).toBe(`npm view ${ordersPackage}'s 404 names no registry: ${summary}`);
+      expect(asked()).toEqual([]);
+    },
+  );
+
+  test('a 404 summary whose URL holds a redacted UUID fails, naming it, and npm whoami is not asked', async ({
+    lab,
+  }) => {
+    const url = `http://registry.test/***/${scoped}`;
+    const { place, asked } = aNpmThatRefuses404(lab, `Not Found - GET ${url}`);
+
+    const read = await baselineOf(place, {
+      packageName: ordersPackage,
+      declared: orders,
+      against: undefined,
+    });
+
+    const redacted = `npm redacted part of the registry URL (${url})`;
+    expect(failureIn(read)).toBe(
+      `npm view ${ordersPackage} failed: ${redacted}, so cf-loom cannot name the registry to ask npm whoami`,
+    );
+    expect(asked()).toEqual([]);
+  });
+});

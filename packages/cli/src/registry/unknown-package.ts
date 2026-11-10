@@ -4,6 +4,7 @@ import { viewLabelOf } from './package-versions.ts';
 
 const registrySetting = 'npm_config_registry';
 const getMarker = ' - GET ';
+const redaction = '***';
 const passwordRedacted = /^[a-z][a-z0-9+.-]*:\/\/[^/?#]*:\*\*\*@/i;
 const credentialsInUrl =
   'npm redacts a registry URL that holds credentials: put them in a //host/:_authToken or //host/:_auth line instead of in the registry URL';
@@ -53,13 +54,23 @@ export async function unknownPackageOf(
 function registryNamedBy(packageName: string, notFound: string): Named {
   const label = viewLabelOf(packageName);
   const url = urlAfterGet(notFound);
-  if (url !== undefined && passwordRedacted.test(url)) {
+  if (url === undefined) {
+    return namesNoRegistry(label, notFound);
+  }
+  if (passwordRedacted.test(url)) {
     return failed(`${label} failed: ${credentialsInUrl}`);
   }
-  const registry = url === undefined ? undefined : registryOfUrl(url, packageName);
-  return registry === undefined
-    ? failed(`${label}'s 404 names no registry: ${lineOf(notFound)}`)
-    : { kind: 'registry', registry };
+  if (url.includes(redaction)) {
+    const redacted = `npm redacted part of the registry URL (${lineOf(url)})`;
+    const unnamable = 'so cf-loom cannot name the registry to ask npm whoami';
+    return failed(`${label} failed: ${redacted}, ${unnamable}`);
+  }
+  const registry = registryOfUrl(url, packageName);
+  return registry === undefined ? namesNoRegistry(label, notFound) : { kind: 'registry', registry };
+}
+
+function namesNoRegistry(label: string, notFound: string): Failed {
+  return failed(`${label}'s 404 names no registry: ${lineOf(notFound)}`);
 }
 
 function urlAfterGet(notFound: string): string | undefined {
