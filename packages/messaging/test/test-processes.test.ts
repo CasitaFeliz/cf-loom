@@ -248,4 +248,14 @@ describe('a run that does not exit by itself, through test-process.ts', () => {
       new Error(`${process.execPath} -e ${script} was ended by SIGKILL: dying`),
     );
   });
+
+  test('a run of a command that is not on PATH rejects with the message the test gave', async () => {
+    const notOnPath = 'cf-loom-no-such-command is not on PATH: install it';
+
+    const failure = await runProcess('cf-loom-no-such-command', [], { notOnPath }).catch(
+      (error: unknown) => error,
+    );
+
+    expect(failure).toEqual(new Error(notOnPath));
+  });
 });
