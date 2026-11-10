@@ -24,7 +24,7 @@ const testLimits: JetStreamBrokerLimits = {
 /** Applies the plan of the Service in `serviceDir` to the nats-server at `url`, as the organization's deploy step would. */
 export async function applyPlanOf(serviceDir: string, url: string, prefix: string): Promise<void> {
   const connecting = { connect: () => connect({ servers: url }) };
-  await applyBrokerPlan(connecting, planOf(serviceDir, prefix), testLimits);
+  await applyBrokerPlan(connecting, await planOf(serviceDir, prefix), testLimits);
 }
 
 /** The stream sequence and Fact id of the last Message on a subject; undefined while the subject holds none. */
