@@ -6,7 +6,6 @@ const registrySetting = 'npm_config_registry';
 const workspacesRefusal = 'ENOWORKSPACES';
 const getMarker = ' - GET ';
 const redaction = '***';
-const passwordRedacted = /^[a-z][a-z0-9+.-]*:\/\/[^/?#]*:\*\*\*@/i;
 const looksUnpublished = 'a package your login cannot read looks unpublished';
 const removeWorkspaceSetting =
   'remove it from the npm configuration the project reads, its .npmrc files or npm_config_workspace in the environment';
@@ -72,7 +71,7 @@ function registryNamedBy(packageName: string, printed: string): Named {
   if (url === undefined) {
     return namesNoRegistry(label, printed);
   }
-  if (passwordRedacted.test(url)) {
+  if (hasRedactedPassword(url)) {
     return failed(`${label} failed: ${credentialsInUrl}`);
   }
   if (url.includes(redaction)) {
@@ -82,6 +81,11 @@ function registryNamedBy(packageName: string, printed: string): Named {
   }
   const registry = registryOfUrl(url, packageName);
   return registry === undefined ? namesNoRegistry(label, printed) : { kind: 'registry', registry };
+}
+
+/** Whether the URL's password is the mark npm prints in place of one. */
+function hasRedactedPassword(url: string): boolean {
+  return URL.canParse(url) && new URL(url).password === redaction;
 }
 
 function namesNoRegistry(label: string, printed: string): Failed {
