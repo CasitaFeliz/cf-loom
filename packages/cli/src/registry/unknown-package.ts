@@ -29,16 +29,16 @@ type Refusal =
 type Login = { readonly kind: 'user'; readonly username: string } | Refusal;
 
 /**
- * Settles what npm's 404 for a package means: a package never published only when npm has a login
- * on the registry that answered the 404, which the 404 names; without one, a package the login
- * cannot read looks the same, so the read fails.
+ * Settles what npm's 404 for a package means, from the summary as npm `printed` it: a package never
+ * published only when npm has a login on the registry that answered the 404, which the 404 names;
+ * without one, a package the login cannot read looks the same, so the read fails.
  */
 export async function unknownPackageOf(
   npm: NpmPlace,
   packageName: string,
-  notFound: string,
+  printed: string,
 ): Promise<UnknownPackage | Failed> {
-  const named = registryNamedBy(packageName, notFound);
+  const named = registryNamedBy(packageName, printed);
   if (named.kind === 'failed') {
     return named;
   }
@@ -66,11 +66,11 @@ function refusalLineOf(refusal: Refusal): string {
  * last path segment, which must be the package's name. A URL npm redacted names no registry that
  * `npm whoami` can be pointed at.
  */
-function registryNamedBy(packageName: string, notFound: string): Named {
+function registryNamedBy(packageName: string, printed: string): Named {
   const label = viewLabelOf(packageName);
-  const url = urlAfterGet(notFound);
+  const url = urlAfterGet(printed);
   if (url === undefined) {
-    return namesNoRegistry(label, notFound);
+    return namesNoRegistry(label, printed);
   }
   if (passwordRedacted.test(url)) {
     return failed(`${label} failed: ${credentialsInUrl}`);
@@ -81,19 +81,19 @@ function registryNamedBy(packageName: string, notFound: string): Named {
     return failed(`${label} failed: ${redacted}, ${unnamable}`);
   }
   const registry = registryOfUrl(url, packageName);
-  return registry === undefined ? namesNoRegistry(label, notFound) : { kind: 'registry', registry };
+  return registry === undefined ? namesNoRegistry(label, printed) : { kind: 'registry', registry };
 }
 
-function namesNoRegistry(label: string, notFound: string): Failed {
-  return failed(`${label}'s 404 names no registry: ${lineOf(notFound)}`);
+function namesNoRegistry(label: string, printed: string): Failed {
+  return failed(`${label}'s 404 names no registry: ${lineOf(printed)}`);
 }
 
-function urlAfterGet(notFound: string): string | undefined {
-  const start = notFound.indexOf(getMarker);
+function urlAfterGet(printed: string): string | undefined {
+  const start = printed.indexOf(getMarker);
   if (start === -1) {
     return undefined;
   }
-  const url = notFound.slice(start + getMarker.length);
+  const url = printed.slice(start + getMarker.length);
   const end = url.search(/\s/);
   return end === -1 ? url : url.slice(0, end);
 }
