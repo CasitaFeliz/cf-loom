@@ -128,6 +128,13 @@ describe('a process a test starts through test-process.ts', () => {
     expect(run.pids).toHaveLength(2);
   });
 
+  test('a server that listened writes no line about a start still waiting when its owner ends', async () => {
+    const run = await runFixture('server-for-test.fixture.ts', { moto_server: 'serves' });
+
+    expect(run.passed).toBe(true);
+    expect(run.output).not.toContain('was still waiting to listen');
+  });
+
   test('a server that ignores SIGTERM, whose stop in afterEach times out, is killed when its owner ends', async () => {
     const run = await runFixture('hung-stop.fixture.ts', { moto_server: 'deaf' });
 
@@ -275,5 +282,12 @@ describe('a run that does not exit by itself, through test-process.ts', () => {
     expect(isRunning(run.pids[0]!)).toBe(false);
     expect(run.output).toContain('nats-server was still running when its owner ended');
     expect(run.output).toContain('warming up');
+  });
+
+  test('a run that exited writes no line about a run still going when its owner ends', async () => {
+    const run = await runFixture('finished-run.fixture.ts', {});
+
+    expect(run.passed).toBe(true);
+    expect(run.output).not.toContain('was still running');
   });
 });
