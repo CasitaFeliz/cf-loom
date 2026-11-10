@@ -86,7 +86,7 @@ export function kindWordsOf(value: unknown): string | undefined {
   }
 }
 
-/** `Array.isArray` runs no trap of a live Proxy and throws only for a revoked one, which has no kind to read. */
+/** `Array.isArray` runs no trap of a live Proxy; it throws for a revoked Proxy, or for a chain of Proxies deeper than the stack, which are named `an object`. */
 function objectWordsOf(value: object): string {
   try {
     return Array.isArray(value) ? 'a list' : 'an object';
