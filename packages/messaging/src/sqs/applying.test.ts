@@ -1,6 +1,7 @@
 // biome-ignore-all lint/style/useNamingConvention: AWS names its fields in PascalCase, as they travel
-import { byCodePoint } from '@cf-loom/contract/internal';
+import { byCodePoint, linesTextOf } from '@cf-loom/contract/internal';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import { aHookThatThrows } from '../../../contract/test/foreign-values.ts';
 import { lineBreakPattern, lineBreaks } from '../../../contract/test/line-breaks.ts';
 import {
   arrangeQueue,
@@ -31,6 +32,12 @@ import {
   topicNamesOf,
 } from '../../test/aws-reading.ts';
 import { aServiceOfLongestNames, planOf } from '../../test/broker-plans.ts';
+import {
+  accountPlacesOf,
+  expectedSentenceOf,
+  limitsPlacesOf,
+  referencesOf,
+} from '../../test/foreign-limits.ts';
 import { jsonValues } from '../../test/json-values.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
 import { applyBrokerPlan, type BrokerPlan, type Duration, type SqsBrokerLimits } from './index.ts';
@@ -1126,6 +1133,39 @@ describe('applyBrokerPlan', () => {
     }
 
     expect(offending).toEqual([]);
+  });
+
+  test('applyBrokerPlan refuses any value its types do not allow at every setting and as the account, on one line, before any call to AWS', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+    const refusing = async (limits: unknown, account = connecting.account) => {
+      const given = { ...connecting, account };
+      const applying = applyBrokerPlan(given, orders.plan, limits as SqsBrokerLimits);
+      return (await rejectionOf(applying)).message;
+    };
+    const ran: string[] = [];
+    const sentences = new Map<string, string>();
+    for (const { path, limits } of referencesOf(testLimits)) {
+      sentences.set(path, expectedSentenceOf(await refusing(limits), path));
+    }
+
+    const refused: [string, string][] = [];
+    const expected: [string, string][] = [];
+    for (const { name, path, limits, shown } of limitsPlacesOf(testLimits, aHookThatThrows(ran))) {
+      refused.push([name, await refusing(limits)]);
+      expected.push([name, linesTextOf([`${path} ${shown} is not ${sentences.get(path)}`])]);
+    }
+    for (const { name, account, shown } of accountPlacesOf(aHookThatThrows(ran))) {
+      refused.push([name, await refusing(testLimits, account as string)]);
+      const line = `connecting.account ${shown} is not a 12-digit AWS account id`;
+      expected.push([name, linesTextOf([line])]);
+    }
+
+    expect(refused).toEqual(expected);
+    expect(ran).toEqual([]);
+    expect(sentences.size).toBe(4);
+    expect(await topicNamesOf(connecting.sns)).toEqual([]);
+    expect(await queueNamesOf(connecting.sqs)).toEqual([]);
   });
 
   test('an account that is not 12 digits and a setting left unset are refused in one error, a line each', async () => {

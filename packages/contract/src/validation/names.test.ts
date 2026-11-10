@@ -1,19 +1,32 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { summarized } from '../../test/failures.ts';
+import { aProvider } from '../../test/providers.ts';
 import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
 import {
   defineApplication,
+  defineCommand,
   defineDefinitions,
+  defineDependency,
   defineEndpoint,
+  defineEvent,
   defineGroup,
   defineGuard,
   defineRejection,
   defineService,
+  defineSubscription,
   type Endpoint,
   type Group,
+  providedEndpoint,
+  providedEvent,
 } from '../index.ts';
-import { type Root, rootNameProblemOf, validateRoot } from '../internal/index.ts';
+import {
+  failureLineOf,
+  isPlainObject,
+  type Root,
+  rootNameProblemOf,
+  validateRoot,
+} from '../internal/index.ts';
 
 /** Validates a Root as the package it names: its package.json named as the Root is. */
 function validateInPackage(root: Root) {
@@ -523,4 +536,363 @@ describe('rootNameProblemOf', () => {
     });
     expect(problem).toBe('a Service name is kebab-case');
   });
+});
+
+const textOfTheValue = 'the source of the function or the description of the symbol';
+
+/** A function written where a string belongs, as untyped code can: converting it to text throws, and its source is what no line may show. */
+function aFunctionThatIsNoText(): never {
+  const written = () => textOfTheValue;
+  const toText = () => {
+    throw new Error('the function was converted to text');
+  };
+  return Object.assign(written, { [Symbol.toPrimitive]: toText }) as never;
+}
+
+/** A Symbol written where a string belongs, whose description of many characters no line may show. */
+function aSymbolOfManyCharacters(): never {
+  return Symbol(textOfTheValue.repeat(1_000)) as never;
+}
+
+/** What untyped code can write where a string belongs, and no line may show the text of. */
+const unwritable: readonly { readonly written: string; readonly make: () => never }[] = [
+  { written: 'a function', make: aFunctionThatIsNoText },
+  { written: 'a symbol', make: aSymbolOfManyCharacters },
+];
+
+describe('validateRoot: a function where a name belongs', () => {
+  test.each([
+    ['a Root', '(root) name', (name: string) => defineService({ name })],
+    [
+      'a Group',
+      '(root) groups[0].name',
+      (name: string) =>
+        defineService({
+          name: 'orders-service',
+          groups: [defineGroup({ name, description: 'Orders', endpoints: [listOrders] })],
+        }),
+    ],
+    [
+      'an Endpoint',
+      'groups.orders endpoints[0].name',
+      (name: string) =>
+        defineService({
+          name: 'orders-service',
+          groups: [aGroup('orders', [defineEndpoint({ ...listing, name })])],
+        }),
+    ],
+    [
+      'a Guard',
+      'endpoints.GET /orders (listOrders) guards[0].name',
+      (name: string) =>
+        defineService({
+          name: 'orders-service',
+          groups: [
+            aGroup('orders', [
+              defineEndpoint({ ...listing, guards: [defineGuard({ name, description: 'A key' })] }),
+            ]),
+          ],
+        }),
+    ],
+  ])('%s named by a function is refused as a name that is no string', (_, location, rootOf) => {
+    const root = rootOf(aFunctionThatIsNoText());
+
+    const validated = validateInPackage(root);
+
+    expect(validated).toEqual(failed(location, 'not-a-string', 'name is a string'));
+  });
+
+  test('a Success status that is a function is shown as a function, never as its source', () => {
+    const success = { ...listing.success, status: aFunctionThatIsNoText() };
+    const endpoint = defineEndpoint({ ...listing, success });
+
+    const validated = validateGroups([aGroup('orders', [endpoint])]);
+
+    expect(validated).toEqual(
+      failed(
+        'endpoints.GET /orders (listOrders) success.status',
+        'success-status',
+        'A Success status is 200, 201, 202, 203 or 204: a function',
+      ),
+    );
+  });
+});
+
+type Fields = Readonly<Record<string, unknown>>;
+
+/** A kind of declaration: every field a valid one writes, and the Root that holds one written from fields. */
+type Kit = {
+  readonly kind: string;
+  readonly fields: Fields;
+  readonly rootOf: (fields: Fields) => Root;
+};
+
+const apiKey = defineGuard({ name: 'apiKey', description: 'A key' });
+const tooManyRequests = defineRejection({ code: 'TOO_MANY', status: 429, message: 'Slow down' });
+const orderLocked = defineRejection({
+  code: 'ORDER_LOCKED',
+  status: 409,
+  message: 'Locked',
+  headers: z.object({ 'x-lock': z.string() }),
+  body: z.object({ by: z.string() }),
+});
+const getPayment = providedEndpoint(
+  aProvider('payments-service'),
+  {
+    name: 'getPayment',
+    method: 'GET',
+    path: '/payments/:paymentId',
+    visibility: 'public',
+    description: 'One payment by id',
+    input: { params: z.object({ paymentId: z.uuid() }) },
+    success: { status: 200, body: z.object({ amount: z.int() }) },
+  },
+  undefined,
+);
+const paymentSettled = providedEvent('payments-service', {
+  name: 'PaymentSettled',
+  version: 1,
+  visibility: 'internal',
+  description: 'A payment was settled',
+  body: z.object({ paymentId: z.uuid() }),
+});
+const standardRejections = {
+  invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
+  notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
+  notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
+};
+
+const eventFields = {
+  name: 'OrderCreated',
+  version: 1,
+  visibility: 'internal',
+  description: 'An order was placed',
+  body: z.object({ orderId: z.uuid() }),
+  lifecycle: 'active',
+} as const;
+const commandFields = {
+  name: 'ChargeCard',
+  version: 1,
+  description: 'Charges the card',
+  body: z.object({ orderId: z.uuid() }),
+  lifecycle: 'active',
+} as const;
+const subscriptionFields = {
+  name: 'notifyOnSettled',
+  description: 'Receives it',
+  event: paymentSettled,
+} as const;
+
+/** A Group of one list of Elements. */
+function groupOf(elements: object): Group {
+  return defineGroup({ name: 'orders', description: 'Orders', ...elements } as never);
+}
+
+/** The Root that holds a Group's Element. */
+function serviceOf(group: Group): Root {
+  return defineService({ name: 'orders-service', groups: [group] });
+}
+
+/** An Endpoint of the Service that holds what a test writes. */
+function endpointWith(declared: object): Endpoint {
+  return defineEndpoint({ ...listing, ...declared });
+}
+
+const kits: readonly Kit[] = [
+  {
+    kind: 'Service',
+    fields: {
+      name: 'orders-service',
+      standardRejections: defineDefinitions({}),
+      groups: [aGroup('orders', [listOrders])],
+      dependencies: [defineDependency({ endpoints: [getPayment] })],
+    },
+    rootOf: (fields) => defineService(fields as never),
+  },
+  {
+    kind: 'Application',
+    fields: { name: 'web-admin', dependencies: [defineDependency({ endpoints: [getPayment] })] },
+    rootOf: (fields) => defineApplication(fields as never),
+  },
+  {
+    kind: 'Definitions',
+    fields: { standardRejections },
+    rootOf: (fields) => defineDefinitions(fields as never),
+  },
+  {
+    kind: 'Group',
+    fields: {
+      name: 'orders',
+      description: 'Orders',
+      endpoints: [listOrders],
+      events: [defineEvent(eventFields)],
+      commands: [defineCommand(commandFields)],
+      subscriptions: [defineSubscription(subscriptionFields)],
+    },
+    rootOf: (fields) => serviceOf(defineGroup(fields as never)),
+  },
+  {
+    kind: 'Endpoint',
+    fields: {
+      name: 'updateOrder',
+      method: 'PUT',
+      path: '/orders/:orderId',
+      visibility: 'public',
+      description: 'Updates an order',
+      input: {
+        params: z.object({ orderId: z.string() }),
+        query: z.object({ dryRun: z.string() }),
+        headers: z.object({ 'x-request-id': z.string() }),
+        body: z.object({ total: z.int() }),
+      },
+      success: {
+        status: 200,
+        headers: z.object({ 'x-version': z.string() }),
+        body: z.object({ total: z.int() }),
+      },
+      guards: [apiKey],
+      rejections: [orderLocked],
+      lifecycle: 'deprecated',
+      deprecatedAt: '2026-11-01T00:00:00Z',
+    },
+    rootOf: (fields) => serviceOf(aGroup('orders', [defineEndpoint(fields as never)])),
+  },
+  {
+    kind: 'Guard',
+    fields: {
+      name: 'quota',
+      description: 'The Caller stays within a quota',
+      demands: {
+        headers: z.object({ 'x-tenant': z.string() }),
+        query: z.object({ plan: z.string() }),
+      },
+      guards: [apiKey],
+      context: z.object({ tenant: z.string() }),
+      qualifier: z.object({ perMinute: z.int() }),
+      rejections: [tooManyRequests],
+    },
+    rootOf: (fields) => {
+      const quota = defineGuard(fields as never);
+      const guards = [apiKey, { guard: quota, qualifier: { perMinute: 1 } }];
+      return serviceOf(aGroup('orders', [endpointWith({ guards })]));
+    },
+  },
+  {
+    kind: 'Rejection',
+    fields: {
+      code: 'ORDER_LOCKED',
+      status: 409,
+      message: 'Locked',
+      headers: z.object({ 'x-lock': z.string() }),
+      body: z.object({ by: z.string() }),
+    },
+    rootOf: (fields) => {
+      const rejections = [defineRejection(fields as never)];
+      return serviceOf(aGroup('orders', [endpointWith({ rejections })]));
+    },
+  },
+  {
+    kind: 'Event',
+    fields: eventFields,
+    rootOf: (fields) => serviceOf(groupOf({ events: [defineEvent(fields as never)] })),
+  },
+  {
+    kind: 'Command',
+    fields: commandFields,
+    rootOf: (fields) => serviceOf(groupOf({ commands: [defineCommand(fields as never)] })),
+  },
+  {
+    kind: 'Subscription',
+    fields: subscriptionFields,
+    rootOf: (fields) =>
+      serviceOf(groupOf({ subscriptions: [defineSubscription(fields as never)] })),
+  },
+  {
+    kind: 'Dependency',
+    fields: { endpoints: [getPayment] },
+    rootOf: (fields) =>
+      defineService({
+        name: 'orders-service',
+        dependencies: [defineDependency(fields as never)],
+      }),
+  },
+];
+
+type FieldPath = readonly [string, ...string[]];
+
+/** Every field of a declaration, and every field of each plain object it holds, as a path. */
+function pathsOf(fields: Fields, above: readonly string[] = []): readonly FieldPath[] {
+  const paths: FieldPath[] = [];
+  for (const [key, value] of Object.entries(fields)) {
+    const path: FieldPath = [...above, key] as unknown as FieldPath;
+    paths.push(path);
+    for (const nested of isPlainObject(value) ? pathsOf(value, path) : []) {
+      paths.push(nested);
+    }
+  }
+  return paths;
+}
+
+/** The fields with what `make` writes at the path, a copy of what holds it. */
+function withWrittenAt(fields: Fields, [key, ...below]: FieldPath, make: () => never): Fields {
+  const [next, ...later] = below;
+  const held =
+    next === undefined ? make() : withWrittenAt(fields[key] as Fields, [next, ...later], make);
+  return { ...fields, [key]: held };
+}
+
+describe('validateRoot: a function or a symbol in any field of any declaration', () => {
+  test('the declarations written here are one of each kind a Root holds', () => {
+    expect(kits.map(({ kind }) => kind)).toEqual([
+      'Service',
+      'Application',
+      'Definitions',
+      'Group',
+      'Endpoint',
+      'Guard',
+      'Rejection',
+      'Event',
+      'Command',
+      'Subscription',
+      'Dependency',
+    ]);
+  });
+
+  test.each(kits)('the $kind declaration written with every field validates', (kit) => {
+    const root = kit.rootOf(kit.fields);
+
+    const validated = validateRoot(root, aRootPackage(root));
+
+    const lines = validated.kind === 'invalid' ? validated.failures.map(failureLineOf) : [];
+    expect(lines).toEqual([]);
+  });
+
+  const rows = kits.flatMap((kit) =>
+    pathsOf(kit.fields).flatMap((path) =>
+      unwritable.map(({ written, make }) => ({
+        kind: kit.kind,
+        field: path.join('.'),
+        written,
+        kit,
+        path,
+        make,
+      })),
+    ),
+  );
+
+  test.each(rows)(
+    'the $kind declaration with $written as its $field fails validation, never throwing and never showing its text',
+    ({ kit, path, make }) => {
+      const root = kit.rootOf(withWrittenAt(kit.fields, path, make));
+
+      const validated = validateRoot(root, aRootPackage(root));
+
+      const lines = validated.kind === 'invalid' ? validated.failures.map(failureLineOf) : [];
+      const showingTheText = lines.filter((line) => line.includes(textOfTheValue));
+      expect({ kind: validated.kind, showingTheText }).toEqual({
+        kind: 'invalid',
+        showingTheText: [],
+      });
+    },
+  );
 });

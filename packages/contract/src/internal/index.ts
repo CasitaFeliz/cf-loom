@@ -367,6 +367,7 @@ export {
   isPlainObject,
   isSameRejection,
   issueLineOf,
+  kindWordsOf,
   listedIssueLinesOf,
   messageIdentityOf,
   methodAndPathOf,
@@ -386,5 +387,6 @@ export {
   subscriptionsOf,
   successParts,
   successShapeOf,
+  textOf,
   writtenTextOf,
 } from '../written/index.ts';

@@ -1,5 +1,6 @@
 // biome-ignore-all lint/style/useNamingConvention: nats.js spells its settings in snake case
 import { defineCommand, defineEvent, defineGroup, defineService } from '@cf-loom/contract';
+import { linesTextOf } from '@cf-loom/contract/internal';
 import { handle, readersOf } from '@cf-loom/handlers';
 import {
   type ConsumerConfig,
@@ -10,6 +11,7 @@ import type { NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
 import { afterAll, beforeAll, describe, expect, onTestFinished, test } from 'vitest';
 import { z } from 'zod';
+import { aHookThatThrows } from '../../../contract/test/foreign-values.ts';
 import { lineBreakPattern, lineBreaks } from '../../../contract/test/line-breaks.ts';
 import { aServiceOfLongestNames, planOf } from '../../test/broker-plans.ts';
 import { stopServerUnder, withMethods } from '../../test/connections.ts';
@@ -18,6 +20,7 @@ import {
   durableConsumerConfigOf,
   durableConsumerInfoOf,
 } from '../../test/durable-consumers.ts';
+import { expectedSentenceOf, limitsPlacesOf, referencesOf } from '../../test/foreign-limits.ts';
 import { jsonKindOf, jsonValues } from '../../test/json-values.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
 import { arrangeStream, streamConfigOf, streamInfoOf } from '../../test/streams.ts';
@@ -1059,6 +1062,34 @@ describe('what applyBrokerPlan refuses', () => {
     }
 
     expect(offending).toEqual([]);
+  });
+
+  test('applyBrokerPlan refuses any value its types do not allow at every Stream and Durable consumer setting, on one line, before it connects', async () => {
+    const service = aConnect();
+    const connecting = { connect: service.connect };
+    const refusing = async (limits: unknown) => {
+      const plan = anOrders(aPrefix()).plan;
+      const applying = applyBrokerPlan(connecting, plan, limits as JetStreamBrokerLimits);
+      return (await rejectionOf(applying)).message;
+    };
+    const ran: string[] = [];
+    const sentences = new Map<string, string>();
+    for (const { path, limits } of referencesOf(testLimits)) {
+      sentences.set(path, expectedSentenceOf(await refusing(limits), path));
+    }
+    const places = limitsPlacesOf(testLimits, aHookThatThrows(ran));
+
+    const refused: [string, string][] = [];
+    const expected: [string, string][] = [];
+    for (const { name, path, limits, shown } of places) {
+      refused.push([name, await refusing(limits)]);
+      expected.push([name, linesTextOf([`${path} ${shown} is not ${sentences.get(path)}`])]);
+    }
+
+    expect(refused).toEqual(expected);
+    expect(ran).toEqual([]);
+    expect(sentences.size).toBe(9);
+    expect(service.opened).toHaveLength(0);
   });
 
   test('applyBrokerPlan refuses limits that are missing from untyped code, without calling connect', async () => {

@@ -334,7 +334,7 @@ describe('serve: maxBodyBytes', () => {
     { label: '{}', given: {}, named: 'an object' },
     { label: 'Object.create(null)', given: Object.create(null), named: 'an object' },
     { label: '[1]', given: [1], named: 'a list' },
-    { label: '1n', given: 1n, named: '1' },
+    { label: '1n', given: 1n, named: 'a bigint' },
   ])(
     'serve refuses a maxBodyBytes of $label at startup, naming it as a written value',
     ({ given, named }) => {

@@ -66,12 +66,38 @@ export function isWithoutValue(value: unknown): value is undefined | null {
   return value === undefined || value === null;
 }
 
-/** A value as a sentence or a location names it; an object has no text of its own. */
-export function textOf(value: unknown): string {
-  if (typeof value === 'object' && value !== null) {
-    return Array.isArray(value) ? 'a list' : 'an object';
+/**
+ * The words that name a value with no text of its own, running none of its code: `a function`,
+ * `a symbol`, `a bigint`, `a list` or `an object`, a revoked Proxy being `an object`; none for a
+ * string, a number, a boolean, `null` or `undefined`.
+ */
+export function kindWordsOf(value: unknown): string | undefined {
+  switch (typeof value) {
+    case 'function':
+      return 'a function';
+    case 'symbol':
+      return 'a symbol';
+    case 'bigint':
+      return 'a bigint';
+    case 'object':
+      return value === null ? undefined : objectWordsOf(value);
+    default:
+      return undefined;
   }
-  return String(value);
+}
+
+/** `Array.isArray` runs no trap of a live Proxy; it throws for a revoked Proxy, or for a chain of Proxies deeper than the stack, which are named `an object`. */
+function objectWordsOf(value: object): string {
+  try {
+    return Array.isArray(value) ? 'a list' : 'an object';
+  } catch {
+    return 'an object';
+  }
+}
+
+/** A value as a sentence or a location names it, running none of its code: its own text, or the words of its kind. */
+export function textOf(value: unknown): string {
+  return kindWordsOf(value) ?? String(value);
 }
 
 /**

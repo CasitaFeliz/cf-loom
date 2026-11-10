@@ -1,6 +1,9 @@
 import { defineService } from '@cf-loom/contract';
+import { linesTextOf } from '@cf-loom/contract/internal';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import { aHookThatThrows } from '../../../contract/test/foreign-values.ts';
 import { aClosedUrl, anAwsConnecting, countCommands } from '../../test/aws-clients.ts';
+import { accountPlacesOf } from '../../test/foreign-limits.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
 import { arrangeOrders, ordersContract } from '../../test/orders.ts';
 import { messaging } from '../index.ts';
@@ -89,6 +92,26 @@ describe('sqs()', () => {
       expect(broker).toThrow(`connecting.account '${account}' is not a 12-digit AWS account id`);
     },
   );
+
+  test('sqs() refuses an account of any value its type does not allow on one line, never with what its code threw', () => {
+    const connecting = anAwsConnecting(moto.url);
+    const ran: string[] = [];
+    const places = accountPlacesOf(aHookThatThrows(ran));
+
+    const refused = places.map(({ name, account }) => {
+      try {
+        sqs({ ...connecting, account: account as string });
+        return [name, 'accepted'];
+      } catch (error) {
+        return [name, error instanceof Error ? error.message : error];
+      }
+    });
+
+    const line = (shown: string) => `connecting.account ${shown} is not a 12-digit AWS account id`;
+    const expected = places.map(({ name, shown }) => [name, linesTextOf([line(shown)])]);
+    expect(refused).toEqual(expected);
+    expect(ran).toEqual([]);
+  });
 
   test('the SNS client’s region decides the topic ARN’s partition', async () => {
     const connecting = anAwsConnecting(moto.url, { region: 'us-gov-west-1' });
