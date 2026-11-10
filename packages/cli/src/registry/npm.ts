@@ -9,7 +9,7 @@ import {
   ranChild,
 } from '../child-process/index.ts';
 
-/** Where npm runs: the project's directory, where npm reads its configuration as for any command run there, a workspaces root's included, and the environment the organization's npm login lives in. */
+/** Where npm runs: the project's directory, where npm reads its configuration as for any command run there (in a member of a workspaces root, the root's `.npmrc` instead of the member's own), and the environment the organization's npm login lives in. */
 export type NpmPlace = {
   readonly directory: string;
   readonly env: Readonly<Record<string, string | undefined>>;
