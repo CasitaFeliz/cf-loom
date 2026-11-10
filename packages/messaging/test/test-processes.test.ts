@@ -258,4 +258,13 @@ describe('a run that does not exit by itself, through test-process.ts', () => {
 
     expect(failure).toEqual(new Error(notOnPath));
   });
+
+  test('a run still going when its test times out is killed, and its command and stderr are in the test’s output', async () => {
+    const run = await runFixture('hung-run-in-test.fixture.ts', { moto_server: 'silent' });
+
+    expect(run.pids).toHaveLength(1);
+    expect(isRunning(run.pids[0]!)).toBe(false);
+    expect(run.output).toContain('moto_server was still running when its owner ended');
+    expect(run.output).toContain('warming up');
+  });
 });

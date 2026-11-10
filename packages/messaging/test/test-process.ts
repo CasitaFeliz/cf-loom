@@ -46,7 +46,8 @@ export type Ran = {
 export type Running = Spawning & { readonly input?: string };
 
 const owners: AsyncDisposableStack[] = [];
-const waiting = new Map<TestProcess, string>();
+/** What each process still short of its end is doing, as the owner writes it when it ends first. */
+const unfinished = new Map<TestProcess, string>();
 
 /**
  * The owner of what is created now: the running test, which also owns what its `beforeEach` and `afterEach` hooks
@@ -111,11 +112,11 @@ function tailOf(stream: Readable | null): () => string {
   return () => kept;
 }
 
-/** Kills `server` and awaits its exit, first writing to stderr its name and stderr when it is still waiting to listen. */
+/** Kills `server` and awaits its exit, first writing to stderr what it was still doing and its stderr when it has not finished. */
 async function kill(server: TestProcess): Promise<void> {
-  const name = waiting.get(server);
-  if (name !== undefined) {
-    console.error(`${name} was still waiting to listen when its owner ended: ${server.stderr()}`);
+  const doing = unfinished.get(server);
+  if (doing !== undefined) {
+    console.error(`${doing} when its owner ended: ${server.stderr()}`);
   }
   server.child.kill('SIGKILL');
   await server.exited.catch(() => undefined);
@@ -131,7 +132,7 @@ export async function untilListening<T>(
   name: string,
   listening: () => T | undefined | Promise<T | undefined>,
 ): Promise<T> {
-  waiting.set(server, name);
+  unfinished.set(server, `${name} was still waiting to listen`);
   try {
     for (;;) {
       const reported = await listening();
@@ -144,7 +145,7 @@ export async function untilListening<T>(
       }
     }
   } finally {
-    waiting.delete(server);
+    unfinished.delete(server);
   }
 }
 
@@ -163,11 +164,16 @@ export async function runProcess(
   const server = ownedProcess(command, args, running);
   const stdout = chunksOf(server.child.stdout);
   const stderr = chunksOf(server.child.stderr);
-  const { status, signal } = await server.exited;
-  if (status === null) {
-    throw new Error(`${commandLine} was ended by ${signal}: ${server.stderr()}`);
+  unfinished.set(server, `${commandLine} was still running`);
+  try {
+    const { status, signal } = await server.exited;
+    if (status === null) {
+      throw new Error(`${commandLine} was ended by ${signal}: ${server.stderr()}`);
+    }
+    return { status, stdout: stdout(), stderr: stderr() };
+  } finally {
+    unfinished.delete(server);
   }
-  return { status, stdout: stdout(), stderr: stderr() };
 }
 
 /** Collects `stream` whole, as text decoded across its chunks. */
