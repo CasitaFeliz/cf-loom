@@ -4,12 +4,16 @@ or {
   JsImport(),
   JsExportFromClause(),
   JsExportNamedFromClause(),
-  JsCallExpression(callee=`require`),
+  JsCallExpression(callee=or {
+    `require`,
+    `process.getBuiltinModule`
+  }),
   JsImportCallExpression()
 } as $use where {
   $use <: contains or {
     `"node:child_process"`,
-    `"child_process"`
+    `"child_process"`,
+    r"`(?:node:)?child_process`"
   },
   $filename <: or {
     r".*\.test\.ts",

@@ -495,7 +495,7 @@ describe('lint plugins', () => {
     expect(await pluginReportsFor(lines, 'packages/contract/src/lines/line.ts')).toEqual([]);
   });
 
-  it('report an import, a type import, a require and an import() of node:child_process in a test file and in a file under test/, each form and both module names (C30)', async () => {
+  it('report an import, a type import, a require, an import() and a process.getBuiltinModule of node:child_process in a test file and in a file under test/, each form, both module names and a template literal (C30)', async () => {
     const lines = [
       "import { spawnSync } from 'node:child_process';",
       "import type { ChildProcess } from 'node:child_process';",
@@ -506,6 +506,10 @@ describe('lint plugins', () => {
       "export const required = require('node:child_process');",
       "export const lazilyBare = await import('child_process');",
       "export const requiredBare = require('child_process');",
+      'export const lazilyTemplate = await import(`node:child_process`);',
+      'export const requiredTemplate = require(`child_process`);',
+      "export const built = process.getBuiltinModule('node:child_process');",
+      'export const builtTemplate = process.getBuiltinModule(`child_process`);',
       'export const used = [spawnSync, everything, execFile];',
     ];
     const expected = [
@@ -518,6 +522,10 @@ describe('lint plugins', () => {
       'C30@7',
       'C30@8',
       'C30@9',
+      'C30@10',
+      'C30@11',
+      'C30@12',
+      'C30@13',
     ];
 
     expect(await pluginReportsFor(lines, 'probe.test.ts')).toEqual(expected);
