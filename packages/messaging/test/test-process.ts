@@ -157,9 +157,9 @@ export async function untilListening<T>(
 
 /**
  * Runs `command` to its exit, owned as `startProcess`'s processes are, and gives its exit status and all it printed.
- * It rejects, naming the command line, when a signal ended it, with the end of its stderr, or when it cannot start.
- * It has no deadline of its own: the test's or hook's timeout bounds it, and the owner then kills it and writes its
- * stderr to the output.
+ * It rejects when a signal ended it, naming the command line, the signal and the end of its stderr, or when it cannot
+ * start, with `notOnPath` when one is given. It has no deadline of its own: the test's or hook's timeout bounds it,
+ * and the owner then kills it and writes its stderr to the output.
  */
 export async function runProcess(
   command: string,
