@@ -717,6 +717,31 @@ describe('pending and redeliver()', () => {
     );
   });
 
+  test('a Fact id holding a space is one quoted word in the console line of a Handler that threw and in the line settled() rejects with', async () => {
+    const printed = printedBy('error');
+    const inMemory = await memory(contract);
+    await inMemory.consume(
+      {
+        commands: { chargeCardV1: handle(readers.commands.chargeCardV1, throwing) },
+        subscriptions: {
+          notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, () => undefined),
+          auditCreated: handle(readers.subscriptions.auditCreated, () => undefined),
+          notifyOnSettled: handle(readers.subscriptions.notifyOnSettled, () => undefined),
+        },
+        readers,
+      },
+      {},
+    );
+    await inMemory.deliver(chargeCardV1, charge, { factId: 'f-2 attempt 7: ok' });
+
+    const settling = await rejectionOf(inMemory.settled());
+
+    const line =
+      'ChargeCard@1 orders-service.command.ChargeCard.v1 "command.ChargeCard.v1:f-2 attempt 7: ok" "f-2 attempt 7: ok" attempt 1: the Handler threw';
+    expect(printed[0]?.startsWith(line)).toBe(true);
+    expect((settling as Error).message).toBe(line);
+  });
+
   test('a delivery a Handler’s publish lined up whose settling rejects reaches the runtime as an unhandled rejection', async () => {
     const broken = new Error('the console broke');
     const unhandled: unknown[] = [];

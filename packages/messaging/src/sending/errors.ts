@@ -5,6 +5,7 @@ import {
   maxBrokerHeaderBytes,
   type TransportHeaderFit,
   unbrokenLineOf,
+  wordOf,
 } from '@cf-loom/contract/internal';
 import type { Issue } from '@cf-loom/handlers';
 
@@ -44,8 +45,8 @@ export class MessageNotSentError extends Error {
     attempted: { readonly factId: string; readonly sent: readonly string[] },
     cause: unknown,
   ) {
-    const sent = attempted.sent.length === 0 ? 'none' : joinedOf(attempted.sent, 'and');
-    const message = `${name} with Fact id ${attempted.factId} was not sent whole; sent: ${sent}`;
+    const sent = attempted.sent.length === 0 ? 'none' : joinedOf(attempted.sent.map(wordOf), 'and');
+    const message = `${name} with Fact id ${wordOf(attempted.factId)} was not sent whole; sent: ${sent}`;
     super(unbrokenLineOf(message), { cause });
     this.factId = attempted.factId;
     this.sent = attempted.sent;

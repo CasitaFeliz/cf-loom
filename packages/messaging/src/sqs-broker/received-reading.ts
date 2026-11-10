@@ -1,6 +1,6 @@
 // biome-ignore-all lint/style/useNamingConvention: SQS spells its fields in PascalCase
 import type { Message } from '@aws-sdk/client-sqs';
-import { joinedOf, logOf, receivedSnsAttributesOf } from '@cf-loom/contract/internal';
+import { joinedOf, logOf, receivedSnsAttributesOf, wordOf } from '@cf-loom/contract/internal';
 import { deliveryOf, type TimedDelivery } from '../broker/index.ts';
 import type { FoundQueue } from './queue-finding.ts';
 
@@ -44,7 +44,7 @@ export function leftForTheDeadLetterQueue(
 ): void {
   console.error(
     ...logOf(
-      `${queue.name}: left SQS message ${message.MessageId} for the dead-letter queue, since it lacks or cannot read ${joinedOf(names, 'and')}`,
+      `${queue.name}: left SQS message ${message.MessageId} for the dead-letter queue, since it lacks or cannot read ${joinedOf(names.map(wordOf), 'and')}`,
     ),
   );
 }

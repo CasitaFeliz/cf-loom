@@ -1,4 +1,4 @@
-import { joinedOf, receivedHeadersOf } from '@cf-loom/contract/internal';
+import { joinedOf, receivedHeadersOf, wordOf, wordsOf } from '@cf-loom/contract/internal';
 import { deliveryOf, type Settlement } from '../broker/index.ts';
 import type { FoundDurableConsumer } from './finding.ts';
 import type { PulledMessage } from './pulled-message.ts';
@@ -12,7 +12,7 @@ export async function deliver(message: PulledMessage, found: FoundDurableConsume
   if (read.kind === 'missing') {
     message.term(
       joinedOf(
-        read.names.map((name) => `no ${name} header`),
+        read.names.map((name) => wordsOf(['no', wordOf(name), 'header'])),
         'and',
       ),
     );

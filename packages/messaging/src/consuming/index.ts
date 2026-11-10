@@ -6,5 +6,7 @@ export type { ConsumedHandlers } from './durable-consumers.ts';
 export { durableConsumersOf } from './durable-consumers.ts';
 export type { ConsumedFault, ServiceFaultHook } from './faults.ts';
 export { consumedFaultLinesOf, reportOf } from './faults.ts';
+export type { MessageNamed } from './message-words.ts';
+export { messageWordsOf } from './message-words.ts';
 export type { BrokerTrouble, BrokerTroubleHook, TroubleTell } from './trouble.ts';
 export { troubledOf, troubleTellOf } from './trouble.ts';

@@ -1,4 +1,4 @@
-import { joinedOf, unbrokenLineOf } from '@cf-loom/contract/internal';
+import { joinedOf, unbrokenLineOf, wordOf } from '@cf-loom/contract/internal';
 
 /** The Durable consumers of Messages that SQS refused to settle once closing started, which `close` rejects for. */
 export type Refusals = {
@@ -18,7 +18,7 @@ export function refusalsOf(): Refusals {
     },
     error: () => {
       const [cause] = causes.values();
-      const durables = joinedOf([...causes.keys()], 'and');
+      const durables = joinedOf([...causes.keys()].map(wordOf), 'and');
       return causes.size === 0
         ? undefined
         : new Error(
