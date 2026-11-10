@@ -7,7 +7,7 @@ import { createVitest, type Vitest } from 'vitest/node';
 import { parse } from 'yaml';
 import { growthHeapMegabytes } from '../packages/contract/vitest.growth.config.ts';
 import { heavyHeapMegabytes } from '../packages/contract/vitest.heavy.config.ts';
-import { runProcess } from '../packages/messaging/test/test-process.ts';
+import { runForOutput } from '../packages/messaging/test/test-process.ts';
 import { lightHeapMegabytes } from '../vitest.config.ts';
 
 const root = join(import.meta.dirname, '..');
@@ -45,13 +45,9 @@ function startVitest(filters: readonly string[] = []): Promise<Vitest> {
 
 /** The heap limit, in bytes, of a Node started with `--max-old-space-size` and no `NODE_OPTIONS`: what a test process of that budget must report. */
 async function heapLimitOf(megabytes: number): Promise<number> {
-  const environment: Record<string, string> = {};
-  for (const [name, value] of Object.entries(process.env)) {
-    if (name !== 'NODE_OPTIONS' && value !== undefined) {
-      environment[name] = value;
-    }
-  }
-  const printed = await runProcess(
+  // biome-ignore lint/style/useNamingConvention: the name of an environment variable
+  const environment = { ...process.env, NODE_OPTIONS: undefined };
+  const printed = await runForOutput(
     process.execPath,
     [
       `--max-old-space-size=${megabytes}`,
@@ -60,10 +56,7 @@ async function heapLimitOf(megabytes: number): Promise<number> {
     ],
     { env: environment },
   );
-  if (printed.status !== 0) {
-    throw new Error(`node ended with status ${printed.status}: ${printed.stderr}`);
-  }
-  return Number(printed.stdout);
+  return Number(printed);
 }
 
 /** A test file that appends the project it runs in and the heap limit of its process to `reportPath`. */

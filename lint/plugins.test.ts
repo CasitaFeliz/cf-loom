@@ -13,16 +13,15 @@ interface Diagnostic {
   readonly location: { readonly start: { readonly line: number } };
 }
 
-/** The JSON report Biome printed, or a failure naming how Biome ended and its stderr when it ended with a status above 1 or printed no such report. */
+/** The JSON report Biome printed, which it does at status 0 and at status 1, or a failure naming how Biome ended and its stderr. */
 function reportOf(biome: Ran): { diagnostics: Diagnostic[] } {
-  const ended = `biome ended with status ${biome.status} and printed ${biome.stdout.length} characters; its stderr: ${biome.stderr}`;
-  if (biome.status > 1) {
-    throw new Error(ended);
-  }
   try {
     return JSON.parse(biome.stdout) as { diagnostics: Diagnostic[] };
   } catch {
-    throw new Error(ended);
+    const printed = `${biome.stdout.length} characters`;
+    throw new Error(
+      `biome ended with status ${biome.status} and printed ${printed}: ${biome.stderr}`,
+    );
   }
 }
 

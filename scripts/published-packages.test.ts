@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { builtinModules } from 'node:module';
 import { join, posix, relative } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { runProcess } from '../packages/messaging/test/test-process.ts';
+import { runForOutput } from '../packages/messaging/test/test-process.ts';
 import { targetsOf } from './package-entries.ts';
 
 type WorkspacePackage = { readonly name: string; readonly path: string; readonly private: boolean };
@@ -17,12 +17,8 @@ type PackedPackage = {
 const root = join(import.meta.dirname, '..');
 
 /** Runs the `pnpm` on `PATH`, which must be the version `packageManager` names, or pnpm fetches that one. */
-async function pnpm(args: string[], cwd: string): Promise<string> {
-  const ran = await runProcess('pnpm', args, { cwd });
-  if (ran.status !== 0) {
-    throw new Error(`pnpm ${args.join(' ')} ended with status ${ran.status}: ${ran.stderr}`);
-  }
-  return ran.stdout;
+function pnpm(args: string[], cwd: string): Promise<string> {
+  return runForOutput('pnpm', args, { cwd });
 }
 
 async function workspacePackages(): Promise<WorkspacePackage[]> {

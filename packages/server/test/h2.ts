@@ -9,7 +9,7 @@ import {
 } from 'node:http2';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runProcess } from '../../messaging/test/test-process.ts';
+import { runForOutput } from '../../messaging/test/test-process.ts';
 
 /** What came back on one HTTP/2 stream once it closed. */
 export type H2Answer = {
@@ -108,14 +108,11 @@ export async function selfSigned(): Promise<Tls> {
   try {
     const keyFile = join(directory, 'key.pem');
     const certFile = join(directory, 'cert.pem');
-    const made = await runProcess('openssl', [
+    await runForOutput('openssl', [
       ...['req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:prime256v1'],
       ...['-nodes', '-days', '1', '-subj', '/CN=localhost'],
       ...['-keyout', keyFile, '-out', certFile],
     ]);
-    if (made.status !== 0) {
-      throw new Error(`openssl ended with status ${made.status}: ${made.stderr}`);
-    }
     return { key: readFileSync(keyFile), cert: readFileSync(certFile) };
   } finally {
     rmSync(directory, { recursive: true, force: true });
