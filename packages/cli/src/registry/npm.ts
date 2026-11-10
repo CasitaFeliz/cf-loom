@@ -99,7 +99,7 @@ export async function jsonFromNpm<Value>(
 /**
  * Starts every npm call with its workspace selection reset: `--workspaces=null`, which beats the
  * setting from any source and is npm's own default, so npm still reads the configuration of the
- * project it finds, and `whoami` is no longer refused for a `workspaces` setting.
+ * project it finds, and `whoami` runs under any `workspaces` setting.
  */
 async function endedOf(place: NpmPlace, call: NpmCall): Promise<ChildRan> {
   const ended = await ranChild({
