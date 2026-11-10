@@ -1,9 +1,9 @@
-import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { type Ran, runProcess } from '../packages/messaging/test/test-process.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 
@@ -13,20 +13,32 @@ interface Diagnostic {
   readonly location: { readonly start: { readonly line: number } };
 }
 
+/** The JSON report Biome printed, or a failure naming how Biome ended and its stderr when it ended with a status above 1 or printed no such report. */
+function reportOf(biome: Ran): { diagnostics: Diagnostic[] } {
+  const ended = `biome ended with status ${biome.status} and printed ${biome.stdout.length} characters; its stderr: ${biome.stderr}`;
+  if (biome.status > 1) {
+    throw new Error(ended);
+  }
+  try {
+    return JSON.parse(biome.stdout) as { diagnostics: Diagnostic[] };
+  } catch {
+    throw new Error(ended);
+  }
+}
+
 /** Each `C<n>@<line>` the repository's GritQL plugins report for `probe.ts` or the file given, in the order of the lines. */
-function pluginReportsFor(lines: readonly string[], file = 'probe.ts'): string[] {
+async function pluginReportsFor(lines: readonly string[], file = 'probe.ts'): Promise<string[]> {
   const directory = mkdtempSync(join(tmpdir(), 'cf-loom-lint-'));
   try {
     mkdirSync(dirname(join(directory, file)), { recursive: true });
     writeFileSync(join(directory, file), `${lines.join('\n')}\n`);
-    const biome = spawnSync(
+    const biome = await runProcess(
       join(root, 'node_modules/.bin/biome'),
       ['lint', '--reporter=json', '--vcs-enabled=false', `--config-path=${root}`, file],
-      { cwd: directory, encoding: 'utf8' },
+      { cwd: directory },
     );
-    const report = JSON.parse(biome.stdout) as { diagnostics: Diagnostic[] };
-    return report.diagnostics
-      .filter((diagnostic) => diagnostic.category === 'plugin')
+    return reportOf(biome)
+      .diagnostics.filter((diagnostic) => diagnostic.category === 'plugin')
       .sort((first, second) => first.location.start.line - second.location.start.line)
       .map((diagnostic) => {
         const rule = diagnostic.message.slice(0, diagnostic.message.indexOf(':'));
@@ -38,7 +50,7 @@ function pluginReportsFor(lines: readonly string[], file = 'probe.ts'): string[]
 }
 
 describe('lint plugins', () => {
-  it('report reduce and reduceRight, optional calls included (C12)', () => {
+  it('report reduce and reduceRight, optional calls included (C12)', async () => {
     const lines = [
       'const counts = [1, 2];',
       'export const total = counts.reduce((sum, count) => sum + count, 0);',
@@ -46,10 +58,10 @@ describe('lint plugins', () => {
       'export const backwards = counts.reduceRight((sum, count) => sum + count, 0);',
     ];
 
-    expect(pluginReportsFor(lines)).toEqual(['C12@2', 'C12@3', 'C12@4']);
+    expect(await pluginReportsFor(lines)).toEqual(['C12@2', 'C12@3', 'C12@4']);
   });
 
-  it('report a spread into push, unshift or splice, optional calls included, but not a spread in an array literal or into another call (C29)', () => {
+  it('report a spread into push, unshift or splice, optional calls included, but not a spread in an array literal or into another call (C29)', async () => {
     const lines = [
       'const list = [1];',
       'const more = [2, 3];',
@@ -66,10 +78,17 @@ describe('lint plugins', () => {
       'list.push([...more]);',
     ];
 
-    expect(pluginReportsFor(lines)).toEqual(['C29@3', 'C29@4', 'C29@5', 'C29@6', 'C29@7', 'C29@8']);
+    expect(await pluginReportsFor(lines)).toEqual([
+      'C29@3',
+      'C29@4',
+      'C29@5',
+      'C29@6',
+      'C29@7',
+      'C29@8',
+    ]);
   });
 
-  it('report a flatMap whose callback returns a conditional array, but not other flatMaps (C10)', () => {
+  it('report a flatMap whose callback returns a conditional array, but not other flatMaps (C10)', async () => {
     const lines = [
       'const counts = [1, 2];',
       'export const even = counts.flatMap((count) => (count % 2 === 0 ? [count] : []));',
@@ -87,10 +106,10 @@ describe('lint plugins', () => {
       ');',
     ];
 
-    expect(pluginReportsFor(lines)).toEqual(['C10@2', 'C10@3', 'C10@4', 'C10@10']);
+    expect(await pluginReportsFor(lines)).toEqual(['C10@2', 'C10@3', 'C10@4', 'C10@10']);
   });
 
-  it('report a boolean parameter of an exported function, defaults and unions included (C17)', () => {
+  it('report a boolean parameter of an exported function, defaults and unions included (C17)', async () => {
     const lines = [
       'export function generate(contract: string, verify: boolean): string {',
       "  return verify ? contract : '';",
@@ -112,10 +131,10 @@ describe('lint plugins', () => {
       "export const empty = isEmpty('', true);",
     ];
 
-    expect(pluginReportsFor(lines)).toEqual(['C17@1', 'C17@4', 'C17@7']);
+    expect(await pluginReportsFor(lines)).toEqual(['C17@1', 'C17@4', 'C17@7']);
   });
 
-  it('report a single-letter name outside a lambda of one expression (C14)', () => {
+  it('report a single-letter name outside a lambda of one expression (C14)', async () => {
     const lines = [
       "import { z } from 'zod';",
       'const counts = [1, 2];',
@@ -141,10 +160,10 @@ describe('lint plugins', () => {
       ');',
     ];
 
-    expect(pluginReportsFor(lines)).toEqual(['C14@11', 'C14@14', 'C14@19']);
+    expect(await pluginReportsFor(lines)).toEqual(['C14@11', 'C14@14', 'C14@19']);
   });
 
-  it('report a clock read in a test file, not in other files or other time functions (C30)', () => {
+  it('report a clock read in a test file, not in other files or other time functions (C30)', async () => {
     const lines = [
       'export const started = performance.now();',
       'export const stamped = Date.now();',
@@ -160,7 +179,7 @@ describe('lint plugins', () => {
       'export const usage = process.memoryUsage();',
     ];
 
-    expect(pluginReportsFor(lines, 'probe.test.ts')).toEqual([
+    expect(await pluginReportsFor(lines, 'probe.test.ts')).toEqual([
       'C30@1',
       'C30@2',
       'C30@3',
@@ -170,11 +189,11 @@ describe('lint plugins', () => {
       'C30@7',
       'C30@8',
     ]);
-    expect(pluginReportsFor(lines, 'growth.ts')).toEqual([]);
-    expect(pluginReportsFor(lines)).toEqual([]);
+    expect(await pluginReportsFor(lines, 'growth.ts')).toEqual([]);
+    expect(await pluginReportsFor(lines)).toEqual([]);
   });
 
-  it('report a spy on the console outside printed.ts, however it is written, but not in printed.ts or on another object (C23)', () => {
+  it('report a spy on the console outside printed.ts, however it is written, but not in printed.ts or on another object (C23)', async () => {
     const reported = [
       "export const bound = vi.spyOn(console, 'error');",
       "vi.spyOn(console, 'warn').mockImplementation(() => {});",
@@ -210,21 +229,23 @@ describe('lint plugins', () => {
     const lines = ["import { vi } from 'vitest';", ...reported, ...unreported];
     const expected = reported.map((_, index) => `C23@${index + 2}`);
 
-    expect(pluginReportsFor(lines, 'probe.test.ts')).toEqual(expected);
-    expect(pluginReportsFor(lines)).toEqual(expected);
-    expect(pluginReportsFor(lines, 'packages/server/test/probe.ts')).toEqual(expected);
-    expect(pluginReportsFor(lines, 'packages/contract/test/printed.ts')).toEqual([]);
+    expect(await pluginReportsFor(lines, 'probe.test.ts')).toEqual(expected);
+    expect(await pluginReportsFor(lines)).toEqual(expected);
+    expect(await pluginReportsFor(lines, 'packages/server/test/probe.ts')).toEqual(expected);
+    expect(await pluginReportsFor(lines, 'packages/contract/test/printed.ts')).toEqual([]);
   });
 
-  it('report a spy on the console in a file whose path only resembles printed.ts (C23)', () => {
+  it('report a spy on the console in a file whose path only resembles printed.ts (C23)', async () => {
     const lines = ["import { vi } from 'vitest';", "vi.spyOn(console, 'error');"];
 
-    expect(pluginReportsFor(lines, 'packages/contract/test/printed.test.ts')).toEqual(['C23@2']);
-    expect(pluginReportsFor(lines, 'packages/server/test/printed.ts')).toEqual(['C23@2']);
-    expect(pluginReportsFor(lines, 'packages/contract/src/printed.ts')).toEqual(['C23@2']);
+    expect(await pluginReportsFor(lines, 'packages/contract/test/printed.test.ts')).toEqual([
+      'C23@2',
+    ]);
+    expect(await pluginReportsFor(lines, 'packages/server/test/printed.ts')).toEqual(['C23@2']);
+    expect(await pluginReportsFor(lines, 'packages/contract/src/printed.ts')).toEqual(['C23@2']);
   });
 
-  it('report a timeout given to a test, a suite or a hook, and vi.setConfig, in a test file, but not other options, a timeout in a body or another file (C30)', () => {
+  it('report a timeout given to a test, a suite or a hook, and vi.setConfig, in a test file, but not other options, a timeout in a body or another file (C30)', async () => {
     const reported = [
       "test('number', () => {}, 10_000);",
       "it('it', () => {}, 5);",
@@ -264,14 +285,14 @@ describe('lint plugins', () => {
       ...unreported,
     ];
 
-    expect(pluginReportsFor(lines, 'probe.test.ts')).toEqual(
+    expect(await pluginReportsFor(lines, 'probe.test.ts')).toEqual(
       reported.map((_, index) => `C30@${index + 2}`),
     );
-    expect(pluginReportsFor(lines, 'probe.fixture.ts')).toEqual([]);
-    expect(pluginReportsFor(lines)).toEqual([]);
+    expect(await pluginReportsFor(lines, 'probe.fixture.ts')).toEqual([]);
+    expect(await pluginReportsFor(lines)).toEqual([]);
   });
 
-  it("report a read of a zod getter derived from a child's own, under walker/ alone (C1)", () => {
+  it("report a read of a zod getter derived from a child's own, under walker/ alone (C1)", async () => {
     const lines = [
       'declare const schema: { readonly _zod: Record<string, unknown> };',
       'export const propValues = schema._zod.propValues;',
@@ -283,11 +304,16 @@ describe('lint plugins', () => {
       'export const iterator = [1].values();',
     ];
 
-    expect(pluginReportsFor(lines, 'walker/probe.ts')).toEqual(['C1@2', 'C1@3', 'C1@4', 'C1@5']);
-    expect(pluginReportsFor(lines)).toEqual([]);
+    expect(await pluginReportsFor(lines, 'walker/probe.ts')).toEqual([
+      'C1@2',
+      'C1@3',
+      'C1@4',
+      'C1@5',
+    ]);
+    expect(await pluginReportsFor(lines)).toEqual([]);
   });
 
-  it('also report such a getter destructured from `_zod` or read from a cast of it, not an alias (C1)', () => {
+  it('also report such a getter destructured from `_zod` or read from a cast of it, not an alias (C1)', async () => {
     const lines = [
       'declare const schema: { readonly _zod: Record<string, unknown> };',
       'export const { propValues } = schema._zod;',
@@ -299,10 +325,15 @@ describe('lint plugins', () => {
       'export const alias = internals.values;',
     ];
 
-    expect(pluginReportsFor(lines, 'walker/probe.ts')).toEqual(['C1@2', 'C1@3', 'C1@4', 'C1@6']);
+    expect(await pluginReportsFor(lines, 'walker/probe.ts')).toEqual([
+      'C1@2',
+      'C1@3',
+      'C1@4',
+      'C1@6',
+    ]);
   });
 
-  it('report a web-standard Request built on a signal outside the held one, a cast, `satisfies`, parentheses and `signal: signal` included, but not in the held one’s own file or a test (C1)', () => {
+  it('report a web-standard Request built on a signal outside the held one, a cast, `satisfies`, parentheses and `signal: signal` included, but not in the held one’s own file or a test (C1)', async () => {
     const lines = [
       'declare const signal: AbortSignal;',
       "export const shorthand = new Request('http://x/', { signal });",
@@ -315,12 +346,12 @@ describe('lint plugins', () => {
       "export const parenthesized = new Request('http://x/', ({ signal }));",
     ];
 
-    expect(pluginReportsFor(lines)).toEqual(['C1@2', 'C1@3', 'C1@4', 'C1@8', 'C1@9']);
-    expect(pluginReportsFor(lines, 'contract/src/wire/held-request.ts')).toEqual([]);
-    expect(pluginReportsFor(lines, 'probe.test.ts')).toEqual([]);
+    expect(await pluginReportsFor(lines)).toEqual(['C1@2', 'C1@3', 'C1@4', 'C1@8', 'C1@9']);
+    expect(await pluginReportsFor(lines, 'contract/src/wire/held-request.ts')).toEqual([]);
+    expect(await pluginReportsFor(lines, 'probe.test.ts')).toEqual([]);
   });
 
-  it('report a join on LF in a library package’s source, optional calls and each quote included, but not another separator, the CLI, a test file or the line module (C1)', () => {
+  it('report a join on LF in a library package’s source, optional calls and each quote included, but not another separator, the CLI, a test file or the line module (C1)', async () => {
     const lines = [
       'const lines = ["a", "b"];',
       "export const single = lines.join('\\n');",
@@ -333,17 +364,17 @@ describe('lint plugins', () => {
       "export const space = lines.join(' ');",
     ];
 
-    expect(pluginReportsFor(lines, 'packages/messaging/src/probe.ts')).toEqual([
+    expect(await pluginReportsFor(lines, 'packages/messaging/src/probe.ts')).toEqual([
       'C1@2',
       'C1@3',
       'C1@4',
       'C1@5',
       'C1@6',
     ]);
-    expect(pluginReportsFor(lines, 'packages/cli/src/probe.ts')).toEqual(['C1@6']);
-    expect(pluginReportsFor(lines, 'packages/messaging/src/probe.test.ts')).toEqual([]);
-    expect(pluginReportsFor(lines, 'packages/contract/src/lines/line.ts')).toEqual(['C1@6']);
-    expect(pluginReportsFor(lines, 'packages/contract/src/lines/joined-names.ts')).toEqual([
+    expect(await pluginReportsFor(lines, 'packages/cli/src/probe.ts')).toEqual(['C1@6']);
+    expect(await pluginReportsFor(lines, 'packages/messaging/src/probe.test.ts')).toEqual([]);
+    expect(await pluginReportsFor(lines, 'packages/contract/src/lines/line.ts')).toEqual(['C1@6']);
+    expect(await pluginReportsFor(lines, 'packages/contract/src/lines/joined-names.ts')).toEqual([
       'C1@2',
       'C1@3',
       'C1@4',
@@ -351,7 +382,7 @@ describe('lint plugins', () => {
     ]);
   });
 
-  it('report a join on a comma and a space in any package’s source, the CLI included, each quote, optional calls, a join in a template and one after a map included, but not another separator, a test file, the joinedOf module, the codeListOf module or the fieldValueOf module (C1)', () => {
+  it('report a join on a comma and a space in any package’s source, the CLI included, each quote, optional calls, a join in a template and one after a map included, but not another separator, a test file, the joinedOf module, the codeListOf module or the fieldValueOf module (C1)', async () => {
     const lines = [
       'const names = ["a", "b"];',
       "export const single = names.join(', ');",
@@ -368,17 +399,21 @@ describe('lint plugins', () => {
     ];
     const reported = ['C1@2', 'C1@3', 'C1@4', 'C1@5', 'C1@6', 'C1@7'];
 
-    expect(pluginReportsFor(lines, 'packages/messaging/src/probe.ts')).toEqual(reported);
-    expect(pluginReportsFor(lines, 'packages/cli/src/config/probe.ts')).toEqual(reported);
-    expect(pluginReportsFor(lines, 'packages/cli/src/source-text/probe.ts')).toEqual(reported);
-    expect(pluginReportsFor(lines, 'packages/messaging/src/probe.test.ts')).toEqual([]);
-    expect(pluginReportsFor(lines, 'packages/contract/src/lines/joined-names.ts')).toEqual([]);
-    expect(pluginReportsFor(lines, 'packages/cli/src/source-text/code-lists.ts')).toEqual([]);
-    expect(pluginReportsFor(lines, 'packages/contract/src/wire/field-values.ts')).toEqual([]);
-    expect(pluginReportsFor(lines, 'scripts/probe.ts')).toEqual([]);
+    expect(await pluginReportsFor(lines, 'packages/messaging/src/probe.ts')).toEqual(reported);
+    expect(await pluginReportsFor(lines, 'packages/cli/src/config/probe.ts')).toEqual(reported);
+    expect(await pluginReportsFor(lines, 'packages/cli/src/source-text/probe.ts')).toEqual(
+      reported,
+    );
+    expect(await pluginReportsFor(lines, 'packages/messaging/src/probe.test.ts')).toEqual([]);
+    expect(await pluginReportsFor(lines, 'packages/contract/src/lines/joined-names.ts')).toEqual(
+      [],
+    );
+    expect(await pluginReportsFor(lines, 'packages/cli/src/source-text/code-lists.ts')).toEqual([]);
+    expect(await pluginReportsFor(lines, 'packages/contract/src/wire/field-values.ts')).toEqual([]);
+    expect(await pluginReportsFor(lines, 'scripts/probe.ts')).toEqual([]);
   });
 
-  it('report a console call in a library package’s source not given one spread of logOf, every method and form, but not the CLI, a test file or the line module (C1)', () => {
+  it('report a console call in a library package’s source not given one spread of logOf, every method and form, but not the CLI, a test file or the line module (C1)', async () => {
     const lines = [
       'declare const cause: unknown;',
       'declare function logOf(line: string, cause?: unknown): readonly unknown[];',
@@ -393,7 +428,7 @@ describe('lint plugins', () => {
       "console.warn(...logOf('spread'));",
     ];
 
-    expect(pluginReportsFor(lines, 'packages/server/src/probe.ts')).toEqual([
+    expect(await pluginReportsFor(lines, 'packages/server/src/probe.ts')).toEqual([
       'C1@3',
       'C1@4',
       'C1@6',
@@ -402,12 +437,12 @@ describe('lint plugins', () => {
       'C1@9',
       'C1@10',
     ]);
-    expect(pluginReportsFor(lines, 'packages/cli/src/probe.ts')).toEqual([]);
-    expect(pluginReportsFor(lines, 'packages/server/src/probe.test.ts')).toEqual([]);
-    expect(pluginReportsFor(lines, 'packages/contract/src/lines/line.ts')).toEqual([]);
+    expect(await pluginReportsFor(lines, 'packages/cli/src/probe.ts')).toEqual([]);
+    expect(await pluginReportsFor(lines, 'packages/server/src/probe.test.ts')).toEqual([]);
+    expect(await pluginReportsFor(lines, 'packages/contract/src/lines/line.ts')).toEqual([]);
   });
 
-  it('report an Error’s message that is neither a literal nor unbrokenLineOf or linesTextOf, AggregateError’s and super’s included, but not the CLI, a test file or the line module (C1)', () => {
+  it('report an Error’s message that is neither a literal nor unbrokenLineOf or linesTextOf, AggregateError’s and super’s included, but not the CLI, a test file or the line module (C1)', async () => {
     const lines = [
       'declare const text: string;',
       'declare function unbrokenLineOf(line: string): string;',
@@ -445,7 +480,7 @@ describe('lint plugins', () => {
       "export const aggregateCalledLiteral = AggregateError([], 'ok');",
     ];
 
-    expect(pluginReportsFor(lines, 'packages/client/src/probe.ts')).toEqual([
+    expect(await pluginReportsFor(lines, 'packages/client/src/probe.ts')).toEqual([
       'C1@6',
       'C1@7',
       'C1@8',
@@ -456,12 +491,12 @@ describe('lint plugins', () => {
       'C1@20',
       'C1@33',
     ]);
-    expect(pluginReportsFor(lines, 'packages/cli/src/probe.ts')).toEqual([]);
-    expect(pluginReportsFor(lines, 'packages/client/src/probe.test.ts')).toEqual([]);
-    expect(pluginReportsFor(lines, 'packages/contract/src/lines/line.ts')).toEqual([]);
+    expect(await pluginReportsFor(lines, 'packages/cli/src/probe.ts')).toEqual([]);
+    expect(await pluginReportsFor(lines, 'packages/client/src/probe.test.ts')).toEqual([]);
+    expect(await pluginReportsFor(lines, 'packages/contract/src/lines/line.ts')).toEqual([]);
   });
 
-  it('report an import, a type import, a require and an import() of node:child_process in a test file and in a file under test/, each form and both module names (C30)', () => {
+  it('report an import, a type import, a require and an import() of node:child_process in a test file and in a file under test/, each form and both module names (C30)', async () => {
     const lines = [
       "import { spawnSync } from 'node:child_process';",
       "import type { ChildProcess } from 'node:child_process';",
@@ -486,12 +521,14 @@ describe('lint plugins', () => {
       'C30@9',
     ];
 
-    expect(pluginReportsFor(lines, 'probe.test.ts')).toEqual(expected);
-    expect(pluginReportsFor(lines, 'packages/server/test/probe.ts')).toEqual(expected);
-    expect(pluginReportsFor(lines, 'examples/billing-service/test/probe.ts')).toEqual(expected);
+    expect(await pluginReportsFor(lines, 'probe.test.ts')).toEqual(expected);
+    expect(await pluginReportsFor(lines, 'packages/server/test/probe.ts')).toEqual(expected);
+    expect(await pluginReportsFor(lines, 'examples/billing-service/test/probe.ts')).toEqual(
+      expected,
+    );
   });
 
-  it('report a re-export from node:child_process in a file under test/, each form (C30)', () => {
+  it('report a re-export from node:child_process in a file under test/, each form (C30)', async () => {
     const lines = [
       "export { spawn } from 'node:child_process';",
       "export { exec as run } from 'child_process';",
@@ -500,7 +537,7 @@ describe('lint plugins', () => {
       "export type { ChildProcess } from 'node:child_process';",
     ];
 
-    expect(pluginReportsFor(lines, 'packages/server/test/probe.ts')).toEqual([
+    expect(await pluginReportsFor(lines, 'packages/server/test/probe.ts')).toEqual([
       'C30@1',
       'C30@2',
       'C30@3',
@@ -509,7 +546,7 @@ describe('lint plugins', () => {
     ]);
   });
 
-  it('do not report node:child_process in test-process.ts, a file under src/, a test file under packages/cli/, or a string or a module that only resembles it (C30)', () => {
+  it('do not report node:child_process in test-process.ts, a file under src/, a test file under packages/cli/, or a string or a module that only resembles it (C30)', async () => {
     const imported = [
       "import { spawn } from 'node:child_process';",
       "export { spawn as run } from 'node:child_process';",
@@ -523,12 +560,12 @@ describe('lint plugins', () => {
       "export { local } from './child_process.ts';",
     ];
 
-    expect(pluginReportsFor(imported, 'packages/messaging/test/test-process.ts')).toEqual([]);
-    expect(pluginReportsFor(imported, 'packages/messaging/src/probe.ts')).toEqual([]);
-    expect(pluginReportsFor(imported, 'scripts/probe.ts')).toEqual([]);
-    expect(pluginReportsFor(imported, 'packages/cli/src/probe.test.ts')).toEqual([]);
-    expect(pluginReportsFor(imported, 'packages/cli/test/probe.ts')).toEqual([]);
-    expect(pluginReportsFor(resembling, 'probe.test.ts')).toEqual([]);
-    expect(pluginReportsFor(resembling, 'packages/server/test/probe.ts')).toEqual([]);
+    expect(await pluginReportsFor(imported, 'packages/messaging/test/test-process.ts')).toEqual([]);
+    expect(await pluginReportsFor(imported, 'packages/messaging/src/probe.ts')).toEqual([]);
+    expect(await pluginReportsFor(imported, 'scripts/probe.ts')).toEqual([]);
+    expect(await pluginReportsFor(imported, 'packages/cli/src/probe.test.ts')).toEqual([]);
+    expect(await pluginReportsFor(imported, 'packages/cli/test/probe.ts')).toEqual([]);
+    expect(await pluginReportsFor(resembling, 'probe.test.ts')).toEqual([]);
+    expect(await pluginReportsFor(resembling, 'packages/server/test/probe.ts')).toEqual([]);
   });
 });
