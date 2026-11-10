@@ -6890,6 +6890,53 @@ describe.concurrent('cf-loom publish', () => {
     expect(putsOf(registry)).toEqual([{ name: '@org/definitions', version: '1.0.0', distTags }]);
   });
 
+  test.for([
+    ['an object', { 'some-lib@*': { peerDependencies: { react: '*' } } }],
+    ['an empty object', {}],
+  ] as const)(
+    'a Definitions Package’s packageExtensions (%s) is left out of what is published, and the rest of its package.json is kept',
+    async ([, packageExtensions], { lab }) => {
+      const manifest = { packageExtensions, sideEffects: false };
+      const project = await aGeneratedProject(lab, aBuiltDefinitions(manifest));
+
+      const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+      expect(ran).toMatchObject({ status: 0, stderr: '' });
+      expect(putsOf(registry)).toHaveLength(1);
+      const published = JSON.parse(publishedFilesOf(registry)['package.json']!);
+      expect(published).not.toHaveProperty('packageExtensions');
+      expect(published.sideEffects).toBe(false);
+    },
+  );
+
+  test('publish --dry-run of a Definitions Package with packageExtensions prints Would publish, and publish then puts it', async ({
+    lab,
+  }) => {
+    const packageExtensions = { 'some-lib@*': { peerDependencies: { react: '*' } } };
+    const project = await aGeneratedProject(lab, aBuiltDefinitions({ packageExtensions }));
+
+    const dry = await publishedAgainst(lab, { project, served: {} }, '--dry-run');
+    const published = await publishedAgainst(lab, { project, served: {} });
+
+    const would =
+      'Would publish @org/definitions@1.0.0 (first version): --dry-run stopped before npm publish';
+    expect(dry.ran.stdout.split('\n').at(-2)).toBe(would);
+    expect(dry.ran.status).toBe(0);
+    expect(published.ran).toMatchObject({ status: 0, stderr: '' });
+    expect(putsOf(published.registry)).toHaveLength(1);
+  });
+
+  test('the project’s package.json keeps its packageExtensions after publish', async ({ lab }) => {
+    const packageExtensions = { 'some-lib@*': { peerDependencies: { react: '*' } } };
+    const project = await aGeneratedProject(lab, aBuiltDefinitions({ packageExtensions }));
+    const before = read(project, 'package.json');
+
+    await publishedAgainst(lab, { project, served: {} });
+
+    expect(read(project, 'package.json')).toBe(before);
+    expect(JSON.parse(before).packageExtensions).toEqual(packageExtensions);
+  });
+
   test('a Definitions Package publishes under the name its package.json gives, whatever its scope', async ({
     lab,
   }) => {
