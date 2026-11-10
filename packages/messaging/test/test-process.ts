@@ -105,9 +105,9 @@ function ownedProcess(command: string, args: readonly string[], running: Running
     });
   });
   exited.catch(() => undefined);
-  const server = { child, exited, stdout: tailOf(child.stdout), stderr: tailOf(child.stderr) };
-  owner.defer(() => kill(server));
-  return server;
+  const started = { child, exited, stdout: tailOf(child.stdout), stderr: tailOf(child.stderr) };
+  owner.defer(() => kill(started));
+  return started;
 }
 
 function tailOf(stream: Readable | null): () => string {
@@ -118,14 +118,14 @@ function tailOf(stream: Readable | null): () => string {
   return () => kept;
 }
 
-/** Kills `server` and awaits its exit, first writing to stderr what it was still doing and its stderr when it has not finished. */
-async function kill(server: TestProcess): Promise<void> {
-  const doing = unfinished.get(server);
+/** Kills `started` and awaits its exit, first writing to stderr what it was still doing and its stderr when it has not finished. */
+async function kill(started: TestProcess): Promise<void> {
+  const doing = unfinished.get(started);
   if (doing !== undefined) {
-    console.error(`${doing} when its owner ended: ${server.stderr()}`);
+    console.error(`${doing} when its owner ended: ${started.stderr()}`);
   }
-  server.child.kill('SIGKILL');
-  await server.exited.catch(() => undefined);
+  started.child.kill('SIGKILL');
+  await started.exited.catch(() => undefined);
 }
 
 /**
@@ -167,18 +167,18 @@ export async function runProcess(
   running: Running = {},
 ): Promise<Ran> {
   const commandLine = commandLineOf(command, args);
-  const server = ownedProcess(command, args, running);
-  const stdout = chunksOf(server.child.stdout);
-  const stderr = chunksOf(server.child.stderr);
-  unfinished.set(server, `${commandLine} was still running`);
+  const started = ownedProcess(command, args, running);
+  const stdout = chunksOf(started.child.stdout);
+  const stderr = chunksOf(started.child.stderr);
+  unfinished.set(started, `${commandLine} was still running`);
   try {
-    const { status, signal } = await server.exited;
+    const { status, signal } = await started.exited;
     if (status === null) {
-      throw new Error(`${commandLine} was ended by ${signal}: ${server.stderr()}`);
+      throw new Error(`${commandLine} was ended by ${signal}: ${started.stderr()}`);
     }
     return { status, stdout: stdout(), stderr: stderr() };
   } finally {
-    unfinished.delete(server);
+    unfinished.delete(started);
   }
 }
 
