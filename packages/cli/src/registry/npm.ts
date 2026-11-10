@@ -82,11 +82,16 @@ export async function textFromNpm(place: NpmPlace, call: NpmCall): Promise<NpmTe
   }
 }
 
+/**
+ * Starts every npm call with its workspace selection reset: `--workspaces=null`, which beats the
+ * setting from any source and is npm's own default, so npm still reads the configuration of the
+ * project it finds, and `whoami` is no longer refused for a `workspaces` setting.
+ */
 async function endedOf(place: NpmPlace, call: NpmCall): Promise<ChildRan> {
   const ended = await ranChild({
     label: call.label,
     file: 'npm',
-    args: [...call.args, '--json', '--no-update-notifier'],
+    args: [...call.args, '--json', '--no-update-notifier', '--workspaces=null'],
     cwd: place.directory,
     env: { ...place.env, ...call.env },
   });

@@ -19,7 +19,7 @@ import {
   type RegistryOptions,
   tarballPathOf,
 } from '../../test/fake-registry.ts';
-import { loginTo, token } from '../../test/npm-environment.ts';
+import { defaultLoginTo, loginTo, type PlaceOptions, token } from '../../test/npm-environment.ts';
 import { type Lab, test } from '../../test/npm-lab.ts';
 import { aPublishedSnapshot, orders, ordersPackage } from '../../test/published-snapshot.ts';
 import { aVersion, type ServedVersion } from '../../test/served-version.ts';
@@ -84,6 +84,39 @@ const paxOfOneMebibytePlusOne = paxRecord('path', `${longFirstFolder}p/snapshot.
 /** The first byte of the "é" is the last of the archive's first 16 KiB, behind this many bytes of filler. */
 const bytesBeforeSplitPax = 13_824;
 const splitPaxPath = paxRecordOfBytes('path', Buffer.from(`package/${'a'.repeat(494)}é.txt`));
+
+/** A place npm runs in, and the environment variables it adds, for a login on one registry. */
+type Arranged = {
+  readonly options: PlaceOptions;
+  readonly env: readonly (readonly [string, string])[];
+};
+
+/** Each source of `workspaces=true` npm reads, as the arrangement of a place that has it. */
+const workspacesSettings: readonly (readonly [string, (login: string) => Arranged])[] = [
+  [
+    'project .npmrc',
+    (login) => ({ options: { projectConfig: 'workspaces=true\n', userConfig: login }, env: [] }),
+  ],
+  [
+    'project .npmrc with include-workspace-root',
+    (login) => ({
+      options: {
+        projectConfig: 'workspaces=true\ninclude-workspace-root=true\n',
+        userConfig: login,
+      },
+      env: [],
+    }),
+  ],
+  ['user config', (login) => ({ options: { userConfig: `${login}workspaces=true\n` }, env: [] })],
+  [
+    'global config',
+    (login) => ({ options: { userConfig: login, globalConfig: 'workspaces=true\n' }, env: [] }),
+  ],
+  [
+    'environment',
+    (login) => ({ options: { userConfig: login }, env: [['npm_config_workspaces', 'true']] }),
+  ],
+];
 
 async function readOrders(lab: Lab, served: RegistryOptions) {
   const registry = await lab.aRegistry(served);
@@ -423,26 +456,51 @@ describe.concurrent('baselineOf', () => {
     expect(calls.filter((call) => secrets.some((secret) => call.includes(secret)))).toEqual([]);
   });
 
-  test('a package the registry does not know has no Baseline once npm reports a user there', async ({
-    lab,
-  }) => {
-    const registry = await lab.aRegistry();
-    const npm = lab.aPlace({ userConfig: loginTo(registry) });
+  test.for([
+    ['a scoped package', ordersPackage, orders, '', loginTo],
+    ['an unscoped package', 'shared', { kind: 'definitions', name: 'shared' }, '', defaultLoginTo],
+    ['a scoped package at a registry path', ordersPackage, orders, '/proj', loginTo],
+  ] as const)(
+    'a package the registry does not know has no Baseline once npm reports a user on the registry that answered its 404, for %s',
+    async ([, packageName, declared, path, login], { lab }) => {
+      const whoamiPath = `${path}/-/whoami`;
+      const registry = await lab.aRegistry({
+        answers: { [whoamiPath]: jsonAnswer(200, { username: 'tester' }) },
+      });
+      const address = { url: `${registry.url}${path}`, host: `${registry.host}${path}` };
+      const npm = lab.aPlace({ userConfig: login(address) });
 
-    const read = await baselineOf(npm, {
-      packageName: ordersPackage,
-      declared: orders,
-      against: undefined,
-    });
+      const read = await baselineOf(npm, { packageName, declared, against: undefined });
 
-    expect(read).toEqual({
-      kind: 'read',
-      listing: { packageName: ordersPackage, versions: [] },
-      baseline: { kind: 'unknown-package', registry: `${registry.url}/`, username: 'tester' },
-    });
-    const whoami = registry.requests.find((request) => request.path === '/-/whoami');
-    expect(whoami?.authorization).toBe(`Bearer ${token}`);
-  });
+      expect(read).toEqual({
+        kind: 'read',
+        listing: { packageName, versions: [] },
+        baseline: { kind: 'unknown-package', registry: `${address.url}/`, username: 'tester' },
+      });
+      const whoami = registry.requests.find((request) => request.path === whoamiPath);
+      expect(whoami?.authorization).toBe(`Bearer ${token}`);
+    },
+  );
+
+  test.for(workspacesSettings)(
+    'with workspaces=true in the %s, a package the registry does not know has no Baseline once npm reports a user there',
+    async ([, arranged], { lab }) => {
+      const registry = await lab.aRegistry();
+      const { options, env } = arranged(loginTo(registry));
+      const place = lab.aPlace(options);
+      const npm = { ...place, env: { ...place.env, ...Object.fromEntries(env) } };
+
+      const read = await baselineOf(npm, {
+        packageName: ordersPackage,
+        declared: orders,
+        against: undefined,
+      });
+
+      expect(read).toMatchObject({
+        baseline: { kind: 'unknown-package', registry: `${registry.url}/`, username: 'tester' },
+      });
+    },
+  );
 
   test('whoami asks the registry npm reads the scope from, not the default registry', async ({
     lab,

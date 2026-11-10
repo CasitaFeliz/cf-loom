@@ -10,6 +10,7 @@ export type NpmEnvironment = NpmPlace['env'];
 
 export type EnvironmentOptions = {
   readonly userConfig?: string;
+  readonly globalConfig?: string;
   readonly path?: string;
   readonly fetchTimeout?: number;
 };
@@ -46,7 +47,7 @@ export function npmSettingsIn(
   options: EnvironmentOptions,
 ): readonly (readonly [string, string])[] {
   writeFileSync(join(folder, 'user.npmrc'), options.userConfig ?? '');
-  writeFileSync(join(folder, 'global.npmrc'), '');
+  writeFileSync(join(folder, 'global.npmrc'), options.globalConfig ?? '');
   const settings = [
     ['userconfig', join(folder, 'user.npmrc')],
     ['globalconfig', join(folder, 'global.npmrc')],
