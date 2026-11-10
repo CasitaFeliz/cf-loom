@@ -1,11 +1,15 @@
 import { type Failed, failed, lineOf } from '../child-process/index.ts';
-import { jsonFromNpm, type NpmPlace, userName } from './npm.ts';
+import { jsonFromNpm, type NpmPlace, type Refused, userName } from './npm.ts';
 import { viewLabelOf } from './package-versions.ts';
 
 const registrySetting = 'npm_config_registry';
+const workspacesRefusal = 'ENOWORKSPACES';
 const getMarker = ' - GET ';
 const redaction = '***';
 const passwordRedacted = /^[a-z][a-z0-9+.-]*:\/\/[^/?#]*:\*\*\*@/i;
+const looksUnpublished = 'a package your login cannot read looks unpublished';
+const removeWorkspaceSetting =
+  'remove it from the npm configuration the project reads, its .npmrc files or npm_config_workspace in the environment';
 const credentialsInUrl =
   'npm redacts a registry URL that holds credentials: put them in a //host/:_authToken or //host/:_auth line instead of in the registry URL';
 
@@ -18,9 +22,11 @@ export type UnknownPackage = {
 
 type Named = { readonly kind: 'registry'; readonly registry: string } | Failed;
 
-type Login =
-  | { readonly kind: 'user'; readonly username: string }
-  | { readonly kind: 'refused'; readonly why: string };
+type Refusal =
+  | { readonly kind: 'refused'; readonly why: string }
+  | { readonly kind: 'workspace-selected'; readonly why: string };
+
+type Login = { readonly kind: 'user'; readonly username: string } | Refusal;
 
 /**
  * Settles what npm's 404 for a package means: a package never published only when npm has a login
@@ -38,12 +44,21 @@ export async function unknownPackageOf(
   }
   const login = await loginOn(npm, named.registry);
   const registry = lineOf(named.registry);
-  if (login.kind === 'refused') {
-    const refusal = `npm has no login there it accepts (${login.why})`;
-    const looksUnpublished = 'a package your login cannot read looks unpublished';
-    return failed(`${packageName} is not in ${registry}, and ${refusal}: ${looksUnpublished}`);
+  if (login.kind === 'user') {
+    return { kind: 'unknown-package', registry, username: login.username };
   }
-  return { kind: 'unknown-package', registry, username: login.username };
+  return failed(`${packageName} is not in ${registry}, and ${refusalLineOf(login)}`);
+}
+
+function refusalLineOf(refusal: Refusal): string {
+  switch (refusal.kind) {
+    case 'refused':
+      return `npm has no login there it accepts (${refusal.why}): ${looksUnpublished}`;
+    case 'workspace-selected': {
+      const refuses = `npm refuses npm whoami under a workspace setting (${refusal.why})`;
+      return `${refuses}: ${removeWorkspaceSetting}, since without npm's login ${looksUnpublished}`;
+    }
+  }
 }
 
 /**
@@ -107,8 +122,15 @@ async function loginOn(npm: NpmPlace, registry: string): Promise<Login> {
         : { kind: 'user', username };
     }
     case 'refused':
-      return { kind: 'refused', why: `${run.code}: ${run.summary}` };
+      return refusedLoginOf(run);
     case 'failed':
       return { kind: 'refused', why: run.message };
   }
+}
+
+function refusedLoginOf({ code, summary }: Refused): Refusal {
+  const why = `${code}: ${summary}`;
+  return code === workspacesRefusal
+    ? { kind: 'workspace-selected', why }
+    : { kind: 'refused', why };
 }

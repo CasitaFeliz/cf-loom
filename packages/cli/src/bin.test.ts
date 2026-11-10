@@ -6681,6 +6681,35 @@ describe.concurrent('cf-loom publish', () => {
     ]);
   });
 
+  test.for([
+    ['check', checkedAgainst],
+    ['publish', publishedAgainst],
+  ] as const)(
+    'with workspace=a in the project’s .npmrc, a first %s exits 3 naming the setting npm refuses whoami under',
+    async ([, runner], { lab }) => {
+      const files = {
+        ...aBuiltDefinitions({ workspaces: ['workspaces/*'] }),
+        '.npmrc': 'workspace=a\n',
+        'workspaces/a/package.json': JSON.stringify({ name: 'a', version: '1.0.0' }),
+      };
+      const project = await aGeneratedProject(lab, files);
+
+      const { ran, registry } = await runner(lab, { project, served: {} });
+
+      const refusal = 'npm refuses npm whoami under a workspace setting';
+      const refused = `(ENOWORKSPACES: This command does not support workspaces.)`;
+      const remove =
+        'remove it from the npm configuration the project reads, its .npmrc files or npm_config_workspace in the environment';
+      const looksUnpublished = 'a package your login cannot read looks unpublished';
+      expect(ran).toEqual({
+        status: 3,
+        stdout: '',
+        stderr: `@org/definitions is not in ${registry.url}/, and ${refusal} ${refused}: ${remove}, since without npm's login ${looksUnpublished}\n`,
+      });
+      expect(putRequestsOf(registry)).toEqual([]);
+    },
+  );
+
   test('a Definitions Package declares the CLI’s peers, whichever zod is installed beside it', async ({
     lab,
   }) => {
