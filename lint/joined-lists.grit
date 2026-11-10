@@ -9,10 +9,17 @@ predicate package_source() {
 }
 
 or {
-  `$items.join($separator)`,
-  `$items?.join($separator)`
-} as $join where {
-  $separator <: r"['\"`], ['\"`]",
-  package_source(),
-  register_diagnostic(span=$join, message="C1: write a list of names in a sentence with joinedOf(names, closing), a list in code with codeListOf(items), and an HTTP field's values with fieldValueOf(values).", severity="error")
+  or {
+    `$items.join($separator)`,
+    `$items?.join($separator)`
+  } as $join where {
+    $separator <: r"['\"`], ['\"`]",
+    package_source(),
+    register_diagnostic(span=$join, message="C1: write a list of names in a sentence with joinedOf(names, closing), a list in code with codeListOf(items), and an HTTP field's values with fieldValueOf(values).", severity="error")
+  },
+  JsTemplateExpression() as $template where {
+    $template <: r"(?s).*\} (?:and|or) \$\{.*",
+    package_source(),
+    register_diagnostic(span=$template, message="C1: write a list of names in a sentence with joinedOf(names, closing), never a template with and or or between two interpolations.", severity="error")
+  }
 }

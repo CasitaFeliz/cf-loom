@@ -1,0 +1,10 @@
+---
+"@cf-loom/contract": patch
+"@cf-loom/handlers": patch
+"@cf-loom/messaging": patch
+"@cf-loom/server": patch
+"@cf-loom/testing": patch
+"@cf-loom/cli": patch
+---
+
+A name, a key or an id in a line a library or the CLI writes is one item, whatever it holds: a text from outside cf-loom in a list, a record or a path stands as itself when made of ASCII letters, digits and `_ @ / $ . : + ~ -` (a key of a path, whose keys a dot separates, of `_ @ / $ -`) and is no bare `and` or `or`, and as JSON otherwise, so `"a, b" and c` reads as two names where `a, b and c` read as three. This holds for the keys of a Qualifier its schema strips, the Root exports of a file that exports more than one Root (`exports more than one Root: "a, b", c and "x y"`), the package names and origins of a code declared twice, of a Definitions Package or Contract Package two packages export, and of a package with no version, the Messages a `CloseAbortedError` hands back, a Message Handler's console line and what `settled()` rejects with, the Fact id of a `MessageNotSentError`, the params of a decoded Snapshot, the two Endpoints of an OpenAPI path that names a param twice (`"DELETE /orders/{}" and "GET /orders/{}"`), the Handler paths two declarations share, and the filters and priority groups of a Durable consumer. An Issue's path and a decoded Snapshot's location write each key as one item too: `body.items.0."a.b"."c d"`, `endpoints."GET /orders/{}".name`, where a key with a dot or a space ran into the keys around it. A Qualifier whose schema strips several keys is one failure for each key, at its place in the Qualifier, `endpoints.GET /orders (listOrders) guards[0].qualifier."a, b".c`, where it was one failure listing them with dotted paths; a code declared twice by one source is told `the Contract twice` and `the Contract 3 times`, where it was `the Contract, twice`, so the comma no longer breaks the list. A Fact id or Broker message id with a space no longer reads as several words in a Fault line.

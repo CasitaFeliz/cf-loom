@@ -347,9 +347,11 @@ through the one rule of [Runtime](ARCHITECTURE.md#runtime) (C1; an aliased `cons
 Error subclass that inherits Error's constructor are out of reach), outside a `*.test.ts`, a `new Request` whose init
 literal has a `signal` member, outside `wire/held-request.ts` (a variable init or a copied Request is out of reach)
 (C1), in any package's `src`, a list joined by `', '`, outside `joinedOf`, `codeListOf` and `fieldValueOf`, which write
-a list in a sentence, in code and in an HTTP field (C1; a list built by a template, an aliased separator and `scripts/`
-are out of reach), and, in a `*.test.ts`, a read of a clock (`performance.now()`, `Date.now()`, `process.hrtime`,
-`process.cpuUsage`, `process.threadCpuUsage`), a timeout given to a test, a suite or a hook, and any `vi.setConfig` (an
+a list in a sentence, in code and in an HTTP field, and a template with ` and ` or ` or ` between two interpolations, so
+write a list with `joinedOf` (C1; any other list built by a template, a record built by a template or by `.join(' ')`
+(#627), an aliased separator and `scripts/` are out of reach), and, in a `*.test.ts`, a read of a clock
+(`performance.now()`, `Date.now()`, `process.hrtime`, `process.cpuUsage`, `process.threadCpuUsage`), a timeout given to a
+test, a suite or a hook, and any `vi.setConfig` (an
 options object passed through a variable or a spread, and a test function under another name, a `test.extend` alias or
 a renamed import, are out of reach; a test given both its options and its body by name is reported, so write one
 inline) (C30), and, in a `*.test.ts` or a file under `test/` of a package, an example or `scripts/readme-service/`,
