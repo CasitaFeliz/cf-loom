@@ -1,7 +1,7 @@
 import { ownOf } from '@cf-loom/contract/internal';
 import { type Failed, failed } from '../child-process/index.ts';
 import type { DistTag } from '../versioning/index.ts';
-import { jsonFromNpm, type NpmPlace } from './npm.ts';
+import { anyPrint, jsonFromNpm, type NpmPlace, type PrintedObject, packedReport } from './npm.ts';
 import { packedTarballOf, publishedSnapshotIn } from './published-tarball.ts';
 import type { ExpectedSnapshot } from './versions.ts';
 
@@ -46,7 +46,7 @@ export async function publishTarball(
 ): Promise<{ readonly kind: 'published' } | Failed> {
   const label = `npm publish ${spec}`;
   const args = ['publish', file, '--tag', tag, '--ignore-scripts'];
-  const run = await jsonFromNpm(npm, { label, args });
+  const run = await jsonFromNpm(npm, { label, args }, anyPrint);
   switch (run.kind) {
     case 'json':
       return { kind: 'published' };
@@ -57,12 +57,16 @@ export async function publishTarball(
   }
 }
 
-/** The paths `npm pack --dry-run` lists for the project's own package, with no lifecycle script. */
+/**
+ * The paths `npm pack --dry-run` lists for the project's own package, with no lifecycle script:
+ * npm is given the project's directory, which it packs alone whatever its workspace settings.
+ */
 export async function packedPathsOf(
   npm: NpmPlace,
 ): Promise<{ readonly kind: 'paths'; readonly paths: readonly string[] } | Failed> {
   const label = 'npm pack --dry-run';
-  const run = await jsonFromNpm(npm, { label, args: ['pack', '--dry-run', '--ignore-scripts'] });
+  const args = ['pack', npm.directory, '--dry-run', '--ignore-scripts'];
+  const run = await jsonFromNpm(npm, { label, args }, packedReport);
   switch (run.kind) {
     case 'json':
       return pathsFrom(label, run.value);
@@ -75,9 +79,8 @@ export async function packedPathsOf(
 
 function pathsFrom(
   label: string,
-  printed: unknown,
+  packed: PrintedObject,
 ): { readonly kind: 'paths'; readonly paths: readonly string[] } | Failed {
-  const [packed] = Array.isArray(printed) ? printed : [];
   const files = ownOf(packed, 'files');
   const paths = Array.isArray(files) ? files.map((file) => ownOf(file, 'path')) : [];
   if (paths.length === 0 || !paths.every(isPath)) {

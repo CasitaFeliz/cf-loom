@@ -14,27 +14,35 @@ export type ConstraintOf<Node> = (check: DeclaredCheck, at: Reached) => Constrai
 type Bounds = { readonly min?: number; readonly max?: number };
 
 /** The constraint a check sets on a node of each type; one that takes no check refuses them all. */
+const constraintsByType = {
+  string: stringConstraint,
+  number: numberConstraint,
+  array: lengthConstraint,
+  boolean: refusedHere,
+  enum: refusedHere,
+  object: refusedHere,
+  record: refusedHere,
+  tuple: refusedHere,
+  union: refusedHere,
+  tagged: refusedHere,
+  allOf: refusedHere,
+  json: refusedHere,
+  ref: refusedHere,
+} as const satisfies Record<SchemaNode['type'], ConstraintOf<object>>;
+
+/**
+ * The constraint a check sets on a node of one type, or on an `Unbuilt` part, whose type its
+ * replacement decides: refused when no type takes the check, else not judged, so it sets nothing.
+ */
 export function constraintOfType(type: SchemaNode['type'] | undefined): ConstraintOf<object> {
-  switch (type) {
-    case 'string':
-      return stringConstraint;
-    case 'number':
-      return numberConstraint;
-    case 'array':
-      return lengthConstraint;
-    case 'boolean':
-    case 'enum':
-    case 'object':
-    case 'record':
-    case 'tuple':
-    case 'union':
-    case 'tagged':
-    case 'allOf':
-    case 'json':
-    case 'ref':
-    case undefined:
-      return refusedHere;
-  }
+  return type === undefined ? refusedOnEveryType : constraintsByType[type];
+}
+
+function refusedOnEveryType(check: DeclaredCheck, at: Reached): Constraint<object> {
+  const verdicts = Object.values(constraintsByType).map((constraintOf) => constraintOf(check, at));
+  const [first] = verdicts;
+  const isRefusedByAll = verdicts.every((verdict) => verdict.kind === 'not-allowed');
+  return first !== undefined && isRefusedByAll ? first : walked({});
 }
 
 function stringConstraint(check: DeclaredCheck, at: Reached): Constraint<StringNode> {

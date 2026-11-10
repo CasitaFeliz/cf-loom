@@ -10,6 +10,7 @@ import {
 import { handle, type MessageMeta, readersOf } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
+import { printedBy } from '../../../contract/test/printed.ts';
 import type { ConsumedFault, Messaging } from '../index.ts';
 import { memory } from './index.ts';
 
@@ -403,7 +404,7 @@ describe('memory(): what the Service publishes and sends', () => {
   });
 
   test('an Event whose only Subscription is a stub is recorded and delivered nowhere', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    printedBy('warn');
     const { publisher, inMemory, received } = await running(() => ({
       subscriptions: { notifyOnV1: handle.stub(readers.subscriptions.notifyOnV1) },
     }));

@@ -18,6 +18,7 @@ import {
 } from '@cf-loom/handlers';
 import { afterEach, describe, expect, onTestFinished, test, vi } from 'vitest';
 import { z } from 'zod';
+import { printedBy, throwingConsole } from '../../../contract/test/printed.ts';
 import { type ConsumedFault, InvalidMessageError } from '../index.ts';
 import { type MemoryMessaging, memory } from './index.ts';
 
@@ -533,7 +534,7 @@ describe('deliver()', () => {
   ])(
     'deliver to an Element nothing consumes rejects, naming it: %s',
     async (_which, { declaration, body }, named) => {
-      vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      printedBy('warn');
       const inMemory = await memory(contract);
       await inMemory.consume(
         {
@@ -700,13 +701,11 @@ describe('pending and redeliver()', () => {
       },
       {},
     );
-    const logging = vi.spyOn(console, 'error').mockImplementation(() => {
-      throw broken;
-    });
+    throwingConsole('error', broken);
 
     const rejection = await rejectionOf(inMemory.deliver(chargeCardV1, charge, { factId: 'f-1' }));
     const pendingAfter = inMemory.pending;
-    logging.mockImplementation(() => undefined);
+    printedBy('error');
     const next = await inMemory.deliver(chargeCardV1, charge, { factId: 'f-2' });
     const settling = await rejectionOf(inMemory.settled());
 
@@ -748,9 +747,7 @@ describe('pending and redeliver()', () => {
       },
       {},
     );
-    vi.spyOn(console, 'error').mockImplementation(() => {
-      throw broken;
-    });
+    throwingConsole('error', broken);
 
     await inMemory.deliver(chargeCardV1, charge, { factId: 'o-1' });
     await rejectionOf(inMemory.settled());

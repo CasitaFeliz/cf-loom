@@ -27,6 +27,7 @@ import { anNpmRecording } from '../test/npm-recording.ts';
 import { installedPayments, paymentsSource, paymentsSpecifier } from '../test/payments-package.ts';
 import { ordersPackage } from '../test/published-snapshot.ts';
 import { aVersion, type ServedVersion } from '../test/served-version.ts';
+import { aStubNpm, developersNpm } from '../test/stub-npm.ts';
 import { entriesOf } from '../test/tarball.ts';
 import { usage } from '../test/usage.ts';
 import { peerRangesOf } from './internal/index.ts';
@@ -4949,6 +4950,15 @@ function publishedFilesOf(registry: Registry): Readonly<Record<string, string>> 
   return entriesOf(put!.tarball);
 }
 
+/** The files `aBuiltDefinitions` publishes: its package.json and built files, and the `snapshot.json` written in. */
+const ownFilesOfDefinitions = ['dist/index.d.ts', 'dist/index.js', 'package.json', 'snapshot.json'];
+
+/** The PATH of an `npm` that prints what is given for `pack --dry-run` and runs the developer's npm for every other call. */
+function aStubNpmPrintingForDryRun(lab: Lab, printed: string): string {
+  const printing = `case " $* " in *" --dry-run "*) echo '${printed}'; exit 0;; esac`;
+  return aStubNpm(lab, `${printing}\n${developersNpm}`);
+}
+
 /** The entries of a project's top level that `generate` and the test's own files make. */
 const projectEntries = [
   'cf-loom.config.ts',
@@ -6567,6 +6577,62 @@ describe.concurrent('cf-loom publish', () => {
     });
     expect(leftBehindIn(project)).toEqual([]);
   });
+
+  test('npm pack reporting no package fails publish with what it printed', async ({ lab }) => {
+    const project = await aGeneratedProject(lab, aBuiltDefinitions());
+    const registry = await lab.aRegistry({});
+    const path = aStubNpmPrintingForDryRun(lab, '{}');
+    const env = lab.anNpmEnvironment({ userConfig: loginTo(registry), path });
+
+    const ran = await cfLoomWith(project, env, 'publish');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: `${neverPublished(registry, '@org/definitions')}\n`,
+      stderr: 'npm pack --dry-run printed {}, not the report of one packed package\n',
+    });
+    expect(putRequestsOf(registry)).toEqual([]);
+    expect(leftBehindIn(project)).toEqual([]);
+  });
+
+  test('a Definitions Package named constructor is published with its own files', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aBuiltDefinitions({ name: 'constructor' }));
+    const registry = await lab.aRegistry({});
+    const env = lab.anNpmEnvironment({ userConfig: defaultLoginTo(registry) });
+
+    const ran = await cfLoomWith(project, env, 'publish');
+
+    expect(ran).toEqual({
+      status: 0,
+      stdout: `${neverPublished(registry, 'constructor')}\nPublished constructor@1.0.0\n`,
+      stderr: '',
+    });
+    expect(Object.keys(publishedFilesOf(registry)).sort()).toEqual(ownFilesOfDefinitions);
+  });
+
+  test.for([
+    ['workspaces=true', 'workspaces=true\n'],
+    ['workspace=other', 'workspace=other\n'],
+  ] as const)(
+    'with %s in the project’s .npmrc, publish lists the project’s own files, not a workspace’s',
+    async ([, npmrc], { lab }) => {
+      const files = {
+        ...aBuiltDefinitions({ workspaces: ['workspaces/*'] }),
+        '.npmrc': npmrc,
+        'workspaces/other/package.json': JSON.stringify({ name: 'other', version: '2.0.0' }),
+        'workspaces/other/index.js': 'export {};\n',
+      };
+      const project = await aGeneratedProject(lab, files);
+      const served = servedAs('@org/definitions', aVersion('0.0.0', { cfLoom: null }));
+
+      const { ran, registry } = await publishedAgainst(lab, { project, served });
+
+      expect(ran).toMatchObject({ status: 0, stderr: '' });
+      expect(Object.keys(publishedFilesOf(registry)).sort()).toEqual(ownFilesOfDefinitions);
+    },
+  );
 
   test('a Definitions Package declares the CLI’s peers, whichever zod is installed beside it', async ({
     lab,

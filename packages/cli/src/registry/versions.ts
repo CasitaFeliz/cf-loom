@@ -6,6 +6,7 @@ import {
 } from '@cf-loom/contract/internal';
 import { type Failed, failed } from '../child-process/index.ts';
 import { compareSemanticVersions } from '../versioning/index.ts';
+import type { PrintedObject } from './npm.ts';
 
 const sha512 = /^sha512-([A-Za-z0-9+/]{86}==)(?:\?\S*)?$/;
 
@@ -50,14 +51,12 @@ export function expectedSnapshotOf(
  * The versions `npm view <package> versions` printed, lowest first; a package that lists none, or
  * a key that is no semantic version, is a failure, since the Baseline cannot be chosen.
  */
-export function versionsFrom(packageName: string, printed: unknown): Versions | Failed {
-  const items = keysPrintedIn(printed);
-  const unreadable = items.find((item) => !isSemanticVersion(item));
+export function versionsFrom(packageName: string, keys: readonly string[]): Versions | Failed {
+  const unreadable = keys.find((key) => !isSemanticVersion(key));
   if (unreadable !== undefined) {
-    const key = typeof unreadable === 'string' ? unreadable : JSON.stringify(unreadable);
-    return failed(`${packageName} lists ${key}, which is no semantic version`);
+    return failed(`${packageName} lists ${unreadable}, which is no semantic version`);
   }
-  const versions = items.filter(isSemanticVersion).sort(compareSemanticVersions);
+  const versions = keys.filter(isSemanticVersion).sort(compareSemanticVersions);
   if (versions.length === 0) {
     const none = `${packageName} lists no version, or has no latest dist-tag, which npm view needs to list them`;
     return failed(none);
@@ -65,18 +64,10 @@ export function versionsFrom(packageName: string, printed: unknown): Versions | 
   return { kind: 'versions', listing: { packageName, versions } };
 }
 
-/** The keys npm printed for `versions`: none when it printed nothing, one when the package lists one version. */
-function keysPrintedIn(printed: unknown): readonly unknown[] {
-  if (printed === undefined) {
-    return [];
-  }
-  return Array.isArray(printed) ? printed : [printed];
-}
-
 /** Tells a version cf-loom published from one it did not, since only the first can be the Baseline, and fails on a malformed `cfLoom` rather than passing over it. */
 export function metadataFrom(
   expected: ExpectedSnapshot,
-  printed: unknown,
+  printed: PrintedObject,
 ): VersionMetadata | NotPublishedByCfLoom | Failed {
   const { spec, version, declared } = expected;
   if (ownOf(printed, 'version') !== version) {

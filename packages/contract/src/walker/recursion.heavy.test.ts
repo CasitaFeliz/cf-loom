@@ -369,11 +369,16 @@ describe('walkSchemas: recursion', () => {
       });
     });
 
-    test('a nullable z.lazy() of itself with an id fails as a nullable def alone', () => {
+    test('a nullable z.lazy() of itself with an id fails as a nullable def, and its cycle is told', () => {
       const walked = walkBody(nullable);
 
       expect(walked).toEqual({
-        located: [refused([{ at: '', ...nullableDefOf('nullable') }])],
+        located: [
+          refused([
+            { at: '', ...nodelessCycle },
+            { at: '', ...nullableDefOf('nullable') },
+          ]),
+        ],
         defs: {},
       });
     });
@@ -610,7 +615,7 @@ describe('walkSchemas: recursion', () => {
         });
       });
 
-      test('cycles left standing in a group that a failure of its root hides in part are each told, at their first def', () => {
+      test('the cycle through a def of a group that fails on its own is told at its first def, beside the cycle below', () => {
         const below: z.ZodType = z.union([z.lazy(() => below), z.string()]).meta({ id: 'below' });
         const top: z.ZodType = z.union([z.array(below), z.lazy(() => left)]).meta({ id: 'top' });
         const left: z.ZodType = z
@@ -625,8 +630,7 @@ describe('walkSchemas: recursion', () => {
         expect(walked).toEqual({
           located: [
             refused([
-              { at: '<|1>', ...nodelessCycle },
-              { at: '<|1><|1>', ...nodelessCycle },
+              { at: '', ...nodelessCycle },
               { at: '<|0>[]', ...nodelessCycle },
             ]),
           ],
@@ -634,7 +638,7 @@ describe('walkSchemas: recursion', () => {
         });
       });
 
-      test('a def that holds a def that failed before it fails with it, so its own cycle is not told', () => {
+      test('a def that holds a def that failed before it fails with it, and its own cycle is told too', () => {
         const below: z.ZodType = z.union([z.lazy(() => below), z.string()]).meta({ id: 'below' });
         const entry: z.ZodType = z.lazy(() => top).meta({ id: 'entry' });
         const top: z.ZodType = z
@@ -661,7 +665,12 @@ describe('walkSchemas: recursion', () => {
         const walked = walkBody(entry);
 
         expect(walked).toEqual({
-          located: [refused([{ at: '<|0>[1].below', ...nodelessCycle }])],
+          located: [
+            refused([
+              { at: '<|1>', ...nodelessCycle },
+              { at: '<|0>[1].below', ...nodelessCycle },
+            ]),
+          ],
           defs: {},
         });
       });
@@ -734,7 +743,7 @@ describe('walkSchemas: recursion', () => {
         expect(walked.located).toEqual([walkedTo({ type: 'ref', name: 'constructor' })]);
       });
 
-      test('a nullable def on a cycle through another def fails as a nullable def alone', () => {
+      test('a nullable def on a cycle through another def fails as a nullable def, and its cycle is told', () => {
         const plain: z.ZodType = z
           .union([z.lazy(() => admitsNull), z.string()])
           .meta({ id: 'plain' });
@@ -746,7 +755,12 @@ describe('walkSchemas: recursion', () => {
         const walked = walkBody(plain);
 
         expect(walked).toEqual({
-          located: [refused([{ at: '<|0>', ...nullableDefOf('admitsNull') }])],
+          located: [
+            refused([
+              { at: '', ...nodelessCycle },
+              { at: '<|0>', ...nullableDefOf('admitsNull') },
+            ]),
+          ],
           defs: {},
         });
       });
@@ -836,11 +850,16 @@ describe('walkSchemas: recursion', () => {
         expect(walkBody(schema)).toEqual(refusedAtBody);
       });
 
-      test('a nullable union of itself fails as a nullable def alone', () => {
+      test('a nullable union of itself fails as a nullable def, and its cycle is told', () => {
         const walked = walkBody(nullableUnion);
 
         expect(walked).toEqual({
-          located: [refused([{ at: '', ...nullableDefOf('nullableUnion') }])],
+          located: [
+            refused([
+              { at: '', ...nodelessCycle },
+              { at: '', ...nullableDefOf('nullableUnion') },
+            ]),
+          ],
           defs: {},
         });
       });
@@ -2923,6 +2942,148 @@ describe('walkSchemas: recursion', () => {
         });
       });
     });
+  });
+});
+
+describe('walkSchemas: a def that fails on its own is judged by every rule over defs', () => {
+  const nodelessCycle = {
+    construct: 'a cycle through z.lazy(), unions and intersections alone, which zod cannot parse',
+  };
+
+  test('a nodeless cycle through a def that fails on its own is told beside the failure', () => {
+    const loop: z.ZodType = z.union([z.lazy(() => loop), z.date()]).meta({ id: 'loop' });
+
+    const walked = walkBody(loop);
+
+    expect(walked).toEqual({
+      located: [
+        refused([
+          { at: '', ...nodelessCycle },
+          { at: '<|1>', ...dateRefused },
+        ]),
+      ],
+      defs: {},
+    });
+  });
+
+  test('an id on a schema that admits null is told beside the failure of the schema', () => {
+    const tree: z.ZodType = z
+      .object({
+        placedAt: z.date(),
+        get children() {
+          return z.array(tree);
+        },
+      })
+      .nullable()
+      .meta({ id: 'tree' });
+
+    const walked = walkBody(tree);
+
+    expect(walked).toEqual({
+      located: [
+        refused([
+          { at: '', ...nullableDefOf('tree') },
+          { at: 'placedAt', ...dateRefused },
+        ]),
+      ],
+      defs: {},
+    });
+  });
+
+  describe('two schemas with one id, the first failing', () => {
+    const duplicateOf = (id: string) => `two schemas with .meta({ id: "${id}" })`;
+    const treeWith = (id: string) => {
+      const tree: z.ZodType = z
+        .object({
+          placedAt: z.date(),
+          get children() {
+            return z.array(tree);
+          },
+        })
+        .meta({ id });
+      return tree;
+    };
+    const folderWith = (id: string) => {
+      const folder: z.ZodType = z
+        .object({
+          get folders() {
+            return z.array(folder);
+          },
+        })
+        .meta({ id });
+      return folder;
+    };
+    const constructsOf = (walked: ReturnType<typeof walkBody>) =>
+      walked.located.map((location) =>
+        'failures' in location ? location.failures.map((failure) => failure.construct) : [],
+      );
+
+    test('the second is a duplicate, whether or not the first failed', () => {
+      const walked = refusalsOf(
+        walkSchemas(
+          [
+            { at: placeAt('body'), schema: treeWith('tree') },
+            { at: placeAt('success'), schema: folderWith('tree') },
+          ],
+          () => undefined,
+        ),
+      );
+
+      expect(constructsOf(walked)).toEqual([['z.date()'], [duplicateOf('tree')]]);
+    });
+
+    test('an id the walk refuses is renamed by its fix, so no duplicate is told', () => {
+      const walked = refusalsOf(
+        walkSchemas(
+          [
+            { at: placeAt('body'), schema: treeWith('Tree') },
+            { at: placeAt('success'), schema: folderWith('Tree') },
+          ],
+          () => undefined,
+        ),
+      );
+
+      const refusedId = '.meta({ id: "Tree" })';
+      expect(constructsOf(walked)).toEqual([[refusedId, 'z.date()'], [refusedId]]);
+    });
+  });
+});
+
+describe('walkSchemas: a nodeless cycle through many defs, one of them failing', () => {
+  const sizes = { small: 1_000, large: 8_000 };
+
+  /** `count` union ids, each leading to the next and the last back to the first, the first beside a date. */
+  function aCycleOf(count: number): z.ZodType {
+    const defs: z.ZodType[] = [];
+    for (let index = 0; index < count; index++) {
+      const next = (index + 1) % count;
+      const beside = index === 0 ? z.date() : z.string();
+      defs.push(
+        z.union([z.lazy(() => defs[next] as z.ZodType), beside]).meta({ id: `link${index}` }),
+      );
+    }
+    return defs[0] as z.ZodType;
+  }
+
+  const walkOf = (count: number) => {
+    const schema = aCycleOf(count);
+    return () => walkSchemas([{ at: placeAt('body'), schema }], () => undefined);
+  };
+
+  test('is walked in time that grows with the defs, and told once beside the date', () => {
+    const walked = walkOf(sizes.large)();
+    const order = orderOf(walkOf, sizes, orders.linear);
+
+    const constructs = refusalsOf(walked).located.map((located) =>
+      'failures' in located ? located.failures.map(({ construct }) => construct) : [],
+    );
+    expect(constructs).toEqual([
+      [
+        'a cycle through z.lazy(), unions and intersections alone, which zod cannot parse',
+        'z.date()',
+      ],
+    ]);
+    expect(order).toBeLessThan(orders.linear);
   });
 });
 

@@ -1,0 +1,13 @@
+language js
+
+JsCallExpression(callee=or {
+  `vi.spyOn`,
+  `vi?.spyOn`
+}, arguments=JsCallArguments(args=[$target, ...])) as $spy where {
+  $target <: or {
+    contains `console`,
+    contains r"['\"`]console['\"`]"
+  },
+  $filename <: not r".*/packages/contract/test/printed\.ts",
+  register_diagnostic(span=$spy, message="C23: a test reads what the console prints through printedBy, or makes it throw with throwingConsole, from packages/contract/test/printed.ts; it never spies on the console itself.", severity="error")
+}

@@ -4,7 +4,7 @@ import {
   follows,
   noParamsSentence,
 } from '../declarations/index.ts';
-import { inFields, type ObjectNode, type Place } from '../walker/index.ts';
+import { inFields, type ObjectOutline, type Place } from '../walker/index.ts';
 import {
   isPlainObject,
   type LocatedEndpoint,
@@ -34,8 +34,10 @@ export function pathFailures({ at, endpoint }: LocatedEndpoint): readonly Declar
 
 /**
  * `params` declares exactly the `:names` of a canonical path, none of them optional, and none
- * without; a `params` whose schema is no object, or no schema, and an `input` that is no object,
- * are the `not-an-object-schema`, `not-a-schema` and `not-an-object` rules' findings.
+ * without, judged on the outline of the object, so it holds beside a field that fails; a `params`
+ * whose schema is no object, or no schema, and an `input` that is no object, are the
+ * `not-an-object-schema`, `not-a-schema` and `not-an-object` rules' findings, and one unbuilt is
+ * refused by what refuses it.
  */
 export function paramsFailures(
   { at, endpoint }: LocatedEndpoint,
@@ -69,7 +71,7 @@ export function paramsFailures(
     : [failure(paramsAt, 'exact-params', exact)];
 }
 
-function optionalParamFailures(params: ObjectNode, at: Place): readonly DeclarationFailure[] {
+function optionalParamFailures(params: ObjectOutline, at: Place): readonly DeclarationFailure[] {
   const optional = Object.entries(params.fields).filter(([, field]) => !field.required);
   return optional.map(([name]) =>
     failure(inFields(at, name), 'optional-path-param', `A path param is never optional: ${name}`),

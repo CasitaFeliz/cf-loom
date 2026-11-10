@@ -1,3 +1,4 @@
+import { inspect } from 'node:util';
 import {
   defineDependency,
   defineEndpoint,
@@ -9,6 +10,7 @@ import {
 import { snapshotOf, validateRoot } from '@cf-loom/contract/internal';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
+import { printedBy } from '../../contract/test/printed.ts';
 import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
 import { aRootPackage } from '../test/root-package.ts';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
@@ -119,7 +121,7 @@ describe('the Deprecation warning', () => {
   });
 
   test('goes to the console without onDeprecation, once per client', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const printed = printedBy('warn');
     const first = client(ordersDependency, { baseUrl: 'http://orders.test', fetch: deprecated });
     const second = client(ordersDependency, { baseUrl: 'http://orders.test', fetch: deprecated });
 
@@ -127,14 +129,14 @@ describe('the Deprecation warning', () => {
     await first.listOrders();
     await second.listOrders();
 
-    expect(warn.mock.calls).toEqual([
-      ['orders-service: listOrders is Deprecated as of 2026-10-17T09:30:00Z'],
-      ['orders-service: listOrders is Deprecated as of 2026-10-17T09:30:00Z'],
+    expect(printed).toEqual([
+      'orders-service: listOrders is Deprecated as of 2026-10-17T09:30:00Z',
+      'orders-service: listOrders is Deprecated as of 2026-10-17T09:30:00Z',
     ]);
   });
 
   test('a response carrying an instant still to come warns with the same wording', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const printed = printedBy('warn');
     const scheduled = async () =>
       new Response(JSON.stringify({ ids: [] }), {
         headers: { deprecation: '@32472144000', 'content-type': 'application/json' },
@@ -143,8 +145,8 @@ describe('the Deprecation warning', () => {
 
     await orders.listOrders();
 
-    expect(warn.mock.calls).toEqual([
-      ['orders-service: listOrders is Deprecated as of 2999-01-01T00:00:00Z'],
+    expect(printed).toEqual([
+      'orders-service: listOrders is Deprecated as of 2999-01-01T00:00:00Z',
     ]);
   });
 
@@ -169,7 +171,7 @@ describe('the Deprecation warning', () => {
 
   test('what onDeprecation throws is caught and written to the console, and the Outcome returned', async () => {
     const error = new Error('a bug in the hook');
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
     const orders = client(ordersDependency, {
       baseUrl: 'http://orders.test',
       fetch: async () => {
@@ -184,16 +186,12 @@ describe('the Deprecation warning', () => {
     const outcome = await orders.listOrders();
 
     expect(outcome).toEqual({ kind: 'success', status: 200, body: { ids: ['o-1'] } });
-    expect(logged).toHaveBeenCalledWith(
-      '%s',
-      'orders-service: listOrders: onDeprecation threw',
-      error,
-    );
+    expect(printed).toContain(`orders-service: listOrders: onDeprecation threw ${inspect(error)}`);
   });
 
   test('what an async onDeprecation rejects with is caught and written to the console, and the Outcome returned', async () => {
     const error = new Error('a bug in the hook');
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
     const orders = client(ordersDependency, {
       baseUrl: 'http://orders.test',
       fetch: async () =>
@@ -207,10 +205,8 @@ describe('the Deprecation warning', () => {
 
     expect(outcome).toEqual({ kind: 'success', status: 200, body: { ids: ['o-1'] } });
     await vi.waitFor(() => {
-      expect(logged).toHaveBeenCalledWith(
-        '%s',
-        'orders-service: listOrders: onDeprecation threw',
-        error,
+      expect(printed).toContain(
+        `orders-service: listOrders: onDeprecation threw ${inspect(error)}`,
       );
     });
   });
@@ -229,12 +225,12 @@ describe('the Deprecation warning', () => {
   });
 
   test('is not told for an Active Endpoint', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const printed = printedBy('warn');
     const orders = client(ordersDependency, { baseUrl: 'http://orders.test', fetch: deprecated });
 
     await orders.ping();
 
-    expect(warn).not.toHaveBeenCalled();
+    expect(printed).toEqual([]);
   });
 });
 

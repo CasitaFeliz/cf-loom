@@ -291,7 +291,7 @@ round, at most two rounds. The reviewer reads once the change passes locally.
 - Never use `git stash`: every worktree shares one stash list. Commit work in progress to your own branch instead.
 - Stop only the processes you started, by their PID; never by a pattern (`pkill`, `killall`).
 - Never load the machine on purpose to reproduce a timing failure; report it as a test that bounds time.
-- Run commands with the Node and npm [CLAUDE.md](CLAUDE.md#repository) names first on `PATH`, as CI does.
+- Run commands with the Node [CLAUDE.md](CLAUDE.md#repository) names first on `PATH`, as CI does.
 - Commit, push or open a PR only when your role says so, with no attribution lines.
 
 [`.claude/settings.json`](.claude/settings.json) denies reading `~/.npmrc` through Claude Code's file tools and running

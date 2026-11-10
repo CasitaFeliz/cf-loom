@@ -1,4 +1,4 @@
-import { format, inspect } from 'node:util';
+import { inspect } from 'node:util';
 import {
   defineDefinitions,
   defineEndpoint,
@@ -21,6 +21,7 @@ import {
 import { afterEach, describe, expect, expectTypeOf, test, vi } from 'vitest';
 import { z } from 'zod';
 import { lineBreakPattern, lineBreaks } from '../../contract/test/line-breaks.ts';
+import { printedBy } from '../../contract/test/printed.ts';
 import {
   type AnsweredRequest,
   type Http,
@@ -96,6 +97,9 @@ const contract = defineService({
   ],
 });
 
+/** What `getOrder` throws for the `thrown` order, one Error so a test can expect the text the console prints for it. */
+const bug = new Error('a bug');
+
 /** The Handlers, `getOrder` answering by its param: a Success, a Rejection, a Fault or a broken body. */
 const handlers = {
   endpoints: {
@@ -111,7 +115,7 @@ const handlers = {
         case 'leaky':
           return success(getOrder, { secret: 'short' });
         case 'thrown':
-          throw new Error('a bug');
+          throw bug;
         default:
           return success(getOrder, { secret: 'a long enough secret' });
       }
@@ -163,39 +167,36 @@ function recording(
 
 describe('serve: onServiceFault', () => {
   test('without it, the console receives each issue’s part, path and code, never the received value', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
 
     await serve(contract, handlers, {})(get('/orders/leaky'));
 
-    expect(logged).toHaveBeenCalledTimes(1);
-    const line = String(logged.mock.calls[0]?.[0]);
-    expect(line).toMatch(/^getOrder: success\.body\.secret too_small: /);
-    expect(line).not.toContain('short');
+    expect(printed).toHaveLength(1);
+    expect(printed[0]).toMatch(/^getOrder: success\.body\.secret too_small: /);
+    expect(printed[0]).not.toContain('short');
   });
 
   test('without it, a throw is logged as the Handler threw, with its cause', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
 
     await serve(contract, handlers, {})(get('/orders/thrown'));
 
-    expect(logged).toHaveBeenCalledWith('%s', 'getOrder: the Handler threw', new Error('a bug'));
+    expect(printed).toContain(`getOrder: the Handler threw ${inspect(bug)}`);
   });
 
   test('without it, the console names the Guard whose Handler failed', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
     const broken = handle(apiKey, () => admit(apiKey, { callerId: 7 } as never));
 
     await serve(contract, { ...handlers, guards: { apiKey: broken } }, {})(get('/orders/o-1'));
 
-    expect(String(logged.mock.calls[0]?.[0])).toMatch(
-      /^getOrder apiKey: context\.callerId invalid_type: /,
-    );
+    expect(printed[0]).toMatch(/^getOrder apiKey: context\.callerId invalid_type: /);
   });
 
   test.for(lineBreaks)(
     'without it, a Caller’s record key holding %s, echoed into a body that breaks the Success, is logged on one line per Issue',
     async ([, code, visible]) => {
-      const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const printed = printedBy('error');
       const key = `a${String.fromCharCode(code)}b`;
       const tally = defineEndpoint({
         name: 'tally',
@@ -225,8 +226,7 @@ describe('serve: onServiceFault', () => {
       )(new Request('http://test/tally', { method: 'POST', headers, body }));
 
       expect(response.status).toBe(500);
-      const lines = logged.mock.calls.map(([line]) => String(line));
-      expect(lines.map((line) => line.split(lineBreakPattern))).toEqual([
+      expect(printed.map((line) => line.split(lineBreakPattern))).toEqual([
         [`tally: success.body.a${visible}b invalid_type: ${expectedMessage}`],
         [`tally: success.body.other invalid_type: ${expectedMessage}`],
       ]);
@@ -236,7 +236,7 @@ describe('serve: onServiceFault', () => {
   test.for(['%o', '%c', '%s'])(
     'without it, a Fault whose message holds the console format specifier %s is printed as its line, then its cause',
     async (specifier) => {
-      const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const printed = printedBy('error');
       const cause = new Error('gateway said no');
       const charge = defineEndpoint({
         name: 'charge',
@@ -270,22 +270,20 @@ describe('serve: onServiceFault', () => {
         {},
       )(new Request('http://test/charge', { method: 'POST' }));
 
-      expect(logged.mock.calls.map((args) => format(...args))).toEqual([
-        `charge: card ${specifier} declined ${inspect(cause)}`,
-      ]);
+      expect(printed).toEqual([`charge: card ${specifier} declined ${inspect(cause)}`]);
     },
   );
 
   test('without it, the console receives a returned Fault with its message', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
 
     await serve(contract, handlers, {})(get('/orders/down'));
 
-    expect(logged).toHaveBeenCalledWith('getOrder: Internal error');
+    expect(printed).toContain('getOrder: Internal error');
   });
 
   test('with it, the console receives nothing', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
     const faults: ServedFault[] = [];
 
     await serve(contract, handlers, {
@@ -295,7 +293,7 @@ describe('serve: onServiceFault', () => {
     })(get('/orders/thrown'));
 
     expect(faults).toHaveLength(1);
-    expect(logged).not.toHaveBeenCalled();
+    expect(printed).toEqual([]);
   });
 
   test('the Caller’s Faults never reach it', async () => {
@@ -324,7 +322,7 @@ describe('serve: onServiceFault', () => {
     })(get('/orders/thrown'));
 
     expect(faults).toStrictEqual([
-      { declaration: getOrder, name: 'getOrder', kind: 'thrown', cause: new Error('a bug') },
+      { declaration: getOrder, name: 'getOrder', kind: 'thrown', cause: bug },
     ]);
   });
 
@@ -363,7 +361,7 @@ describe('serve: a hook that fails', () => {
   };
 
   test('an onServiceFault that throws leaves the answer as computed', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    printedBy('error');
 
     const response = await serve(contract, handlers, { onServiceFault: throwing })(
       get('/orders/thrown'),
@@ -376,35 +374,35 @@ describe('serve: a hook that fails', () => {
   });
 
   test('an onServiceFault that throws is logged with what it threw as cause', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
 
     await serve(contract, handlers, { onServiceFault: throwing })(get('/orders/down'));
 
-    expect(logged).toHaveBeenCalledWith('%s', 'getOrder: onServiceFault threw', broken);
+    expect(printed).toContain(`getOrder: onServiceFault threw ${inspect(broken)}`);
   });
 
   test('an onServiceFault of a Guard’s Fault that throws is logged naming the Guard', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
     const guarded = { ...handlers, guards: { apiKey: handle(apiKey, () => fault(downFault)) } };
 
     await serve(contract, guarded, { onServiceFault: throwing })(get('/orders/o-1'));
 
-    expect(logged).toHaveBeenCalledWith('%s', 'getOrder apiKey: onServiceFault threw', broken);
+    expect(printed).toContain(`getOrder apiKey: onServiceFault threw ${inspect(broken)}`);
   });
 
   test('an onServiceFault that rejects is awaited and logged, and the Http resolves', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
 
     const response = await serve(contract, handlers, { onServiceFault: rejecting })(
       get('/orders/down'),
     );
 
     expect(response.status).toBe(503);
-    expect(logged).toHaveBeenCalledWith('%s', 'getOrder: onServiceFault threw', broken);
+    expect(printed).toContain(`getOrder: onServiceFault threw ${inspect(broken)}`);
   });
 
   test('onAnswered still receives the record when onServiceFault throws', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    printedBy('error');
     const answered: AnsweredRequest[] = [];
     const http = serve(contract, handlers, {
       onServiceFault: throwing,
@@ -422,20 +420,20 @@ describe('serve: a hook that fails', () => {
     ['throws', throwing],
     ['rejects', rejecting],
   ])('an onAnswered that %s leaves the response returned, and is logged', async (_, onAnswered) => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
 
     const response = await serve(contract, handlers, { onAnswered })(get('/orders/o-1'));
 
     expect(response.status).toBe(200);
-    expect(logged).toHaveBeenCalledWith('%s', 'getOrder: onAnswered threw', broken);
+    expect(printed).toContain(`getOrder: onAnswered threw ${inspect(broken)}`);
   });
 
   test('an onAnswered that throws for a request no Endpoint matched is logged as serve’s', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
 
     await serve(contract, handlers, { onAnswered: throwing })(get('/customers'));
 
-    expect(logged).toHaveBeenCalledWith('%s', 'serve: onAnswered threw', broken);
+    expect(printed).toContain(`serve: onAnswered threw ${inspect(broken)}`);
   });
 
   test('serve waits for an async onAnswered before it resolves', async () => {

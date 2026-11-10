@@ -1,6 +1,7 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { inheritedPath } from './npm-environment.ts';
+import { anNpmPathWith } from './stub-npm.ts';
 
 /** A call the recording npm got: its arguments, and the SHA-512 (hex) of the file it was asked to `publish`. */
 export type RecordedNpmCall = {
@@ -8,16 +9,15 @@ export type RecordedNpmCall = {
   readonly publishedSha512: string | null;
 };
 
-/** An `npm` that records its calls, the PATH that finds it before the real one, and the variables it reads. */
+/** An `npm` that records its calls, the PATH that finds it before the real one, and the variable it reads. */
 export type RecordingNpm = {
   readonly path: string;
   readonly env: Readonly<Record<string, string>>;
   readonly calls: () => readonly RecordedNpmCall[];
 };
 
-/** The variables the recording npm reads: where it logs, and the PATH that finds the npm it runs. */
+/** The variable the recording npm reads: where it logs. */
 const callsVariable = 'CF_LOOM_NPM_CALLS';
-const realPathVariable = 'CF_LOOM_NPM_REAL_PATH';
 
 const script = [
   '#!/usr/bin/env node',
@@ -30,7 +30,7 @@ const script = [
   'const bytes = isFile ? readFileSync(file) : undefined;',
   "const sha = bytes === undefined ? null : createHash('sha512').update(bytes).digest('hex');",
   `appendFileSync(process.env.${callsVariable}, JSON.stringify({ args, publishedSha512: sha }) + '\\n');`,
-  `const real = { ...process.env, PATH: process.env.${realPathVariable} };`,
+  `const real = { ...process.env, PATH: ${JSON.stringify(inheritedPath)} };`,
   "const ran = spawnSync('npm', args, { stdio: 'inherit', env: real });",
   'process.exit(ran.status ?? 1);',
 ].join('\n');
@@ -40,8 +40,7 @@ export function anNpmRecording(folder: string): RecordingNpm {
   const bin = join(folder, 'recording-npm');
   const log = join(folder, 'npm-calls.jsonl');
   mkdirSync(bin);
-  writeFileSync(join(bin, 'npm'), script);
-  chmodSync(join(bin, 'npm'), 0o755);
+  const path = anNpmPathWith(bin, script);
   const calls = () =>
     existsSync(log)
       ? readFileSync(log, 'utf8')
@@ -49,6 +48,5 @@ export function anNpmRecording(folder: string): RecordingNpm {
           .split('\n')
           .map((line) => JSON.parse(line))
       : [];
-  const env = { [callsVariable]: log, [realPathVariable]: inheritedPath };
-  return { path: `${bin}:${inheritedPath}`, env, calls };
+  return { path, env: { [callsVariable]: log }, calls };
 }

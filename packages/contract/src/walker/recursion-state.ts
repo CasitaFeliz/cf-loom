@@ -1,8 +1,7 @@
 import type * as core from 'zod/v4/core';
 import type { Memos } from './memos.ts';
-import type { SchemaNode } from './nodes.ts';
 import type { Remembered } from './remembered.ts';
-import type { ReachedSchema, Walked } from './walked.ts';
+import type { Outline, ReachedSchema, Walked } from './walked.ts';
 
 /** A schema the walk enters, where it sits and the id its own metadata gives it. */
 export type Entering = ReachedSchema & { readonly id: string | undefined };
@@ -25,8 +24,8 @@ export type Entered = Entering & {
   isOpen: boolean;
   isOnCycle: boolean;
   answer: Walked | undefined;
-  /** The def it wrote, kept once a failure takes the def's place, so its group's judgement still reads it. */
-  def: SchemaNode | undefined;
+  /** The def it wrote, as the outline it was built as, kept once a failure takes the def's place, so the rules over defs still judge it. */
+  def: Outline | undefined;
   /**
    * Once it failed as a def, the end of `open` at that moment: every member between its slot and
    * here is no def any more, so a later failure passes over them.

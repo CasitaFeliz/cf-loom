@@ -2,7 +2,7 @@ import type * as core from 'zod/v4/core';
 import { checksOf, type DeclaredCheck } from './check-defs.ts';
 import { refusedCheck } from './check-names.ts';
 import { type CheckedAt, constrain } from './checks.ts';
-import { walkEnum, walkTagged, walkUnion } from './choices.ts';
+import { walkEnum, walkUnion } from './choices.ts';
 import { walkArray, walkTuple } from './collections.ts';
 import {
   type DefOfType,
@@ -15,13 +15,16 @@ import {
   type RefusedDef,
   type WalkedDef,
 } from './def-types.ts';
+import { walkIntersection } from './intersections.ts';
 import { innerOfOneLazy } from './lazy.ts';
 import { inside } from './location.ts';
 import { annotated } from './metadata.ts';
 import { notAllowed, type Refused, refused, refusedZodType } from './not-allowed.ts';
-import { walkIntersection, walkObject, walkRecord } from './objects.ts';
+import { walkObject } from './objects.ts';
+import { walkRecord } from './records.ts';
 import { isJsonUnion, walkLiteral } from './scalars.ts';
 import { keyStep, valueStep } from './steps.ts';
+import { walkTagged } from './variants.ts';
 import {
   failed,
   failuresOf,
@@ -120,8 +123,8 @@ function refusalOf(def: RefusedDef): Refused {
 }
 
 /**
- * A refused def type, worded as `defTypes` says, beside what lies inside it: a wrapper stands for
- * the schema inside, a map's key and value sit at their own places as a record's do, a pipe's
+ * A refused def type, worded as `defTypes` says, beside what lies inside it, which is walked and
+ * judged where it stands: a map's key and value sit at their own places as a record's do, a pipe's
  * transform is the pipe's own refusal.
  */
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: one decision: what lies inside each refused zod type
@@ -142,7 +145,7 @@ function* refusedNodeOf(def: RefusedDef, at: Reached, walker: Walker): Walking {
     case 'nonoptional':
     case 'promise':
     case 'success':
-      return refusedBeside(notAllowed(at, refusal), yield* walker.schema(def.innerType, at));
+      return failed(failuresOf([notAllowed(at, refusal), yield* walker.schema(def.innerType, at)]));
     case 'map': {
       const key = yield* walker.schema(def.keyType, inside(at, keyStep));
       const value = yield* walker.schema(def.valueType, inside(at, valueStep));

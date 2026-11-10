@@ -2,9 +2,13 @@ import type { $ZodType } from 'zod/v4/core';
 import {
   failuresOf,
   isSchema,
+  isWhole,
+  type JudgedDefs,
   type LocatedSchema,
   type NotAllowed,
   type ObjectNode,
+  type Outline,
+  outlineOf,
   type Place,
   placeNameOf,
   placeOf,
@@ -44,8 +48,8 @@ export type Slot = {
 /** A slot that holds a zod schema, so the walk can be given it. */
 export type SchemaSlot = Slot & { readonly value: $ZodType };
 
-/** A slot whose schema walked to a node. */
-export type WalkedSlot = Slot & { readonly node: SchemaNode };
+/** A slot whose schema walked to a node, or failed keeping the outline it was building. */
+export type OutlinedSlot = Slot & { readonly node: Outline };
 
 /** Every slot of a Root that holds a schema, and the slots a cast filled with no schema. */
 export type SchemaSlots = {
@@ -53,11 +57,15 @@ export type SchemaSlots = {
   readonly failures: readonly DeclarationFailure[];
 };
 
-/** The walked nodes of a Root, by the declaration that owns them and the part, with their `defs`. */
+/**
+ * The outlines of a Root's schemas, a node walked whole being its own, by the declaration that owns
+ * them and the part, with the `defs` the Snapshot holds and the defs the rules over defs judge.
+ */
 export type Nodes = {
-  readonly slots: readonly WalkedSlot[];
-  readonly nodeOf: (owner: unknown, part: Part) => SchemaNode | undefined;
+  readonly slots: readonly OutlinedSlot[];
+  readonly nodeOf: (owner: unknown, part: Part) => Outline | undefined;
   readonly defs: Readonly<Record<string, SchemaNode>>;
+  readonly judgedDefs: JudgedDefs;
 };
 
 /** The slots of a Root's Endpoints, Guards and Rejections that travel as text, in declaration order. */
@@ -96,27 +104,28 @@ export function locatedSchemasOf(slots: readonly SchemaSlot[]): readonly Located
   return slots.map(({ at, value }) => ({ at, schema: value }));
 }
 
-/** The walked nodes by owner and part, zipped with the slots the walk was given, in order. */
+/** The outlines by owner and part, zipped with the slots the walk was given, in order. */
 export function nodesOf(slots: readonly SchemaSlot[], walked: WalkedSchemas): Nodes {
   if (walked.located.length !== slots.length) {
     throw new Error('The walk returned a result for a number of schemas other than given: a bug.');
   }
-  const walkedSlots: WalkedSlot[] = [];
-  const nodesByOwner = new Map<unknown, Map<Part, SchemaNode>>();
+  const outlinedSlots: OutlinedSlot[] = [];
+  const outlinesByOwner = new Map<unknown, Map<Part, Outline>>();
   for (const [index, slot] of slots.entries()) {
     const location = walked.located[index];
-    if (location?.walked.kind !== 'walked') {
+    if (location === undefined) {
       continue;
     }
-    walkedSlots.push({ ...slot, node: location.walked.value });
-    const parts = nodesByOwner.get(slot.owner) ?? new Map<Part, SchemaNode>();
+    const node = outlineOf(location.walked);
+    outlinedSlots.push({ ...slot, node });
+    const parts = outlinesByOwner.get(slot.owner) ?? new Map<Part, Outline>();
     if (!parts.has(slot.part)) {
-      parts.set(slot.part, location.walked.value);
+      parts.set(slot.part, node);
     }
-    nodesByOwner.set(slot.owner, parts);
+    outlinesByOwner.set(slot.owner, parts);
   }
-  const nodeOf = (owner: unknown, part: Part) => nodesByOwner.get(owner)?.get(part);
-  return { slots: walkedSlots, nodeOf, defs: walked.defs };
+  const nodeOf = (owner: unknown, part: Part) => outlinesByOwner.get(owner)?.get(part);
+  return { slots: outlinedSlots, nodeOf, defs: walked.defs, judgedDefs: walked.judgedDefs };
 }
 
 /**
@@ -128,13 +137,17 @@ export type NodeLookup = {
   (declaration: unknown, part: Part): SchemaNode | undefined;
 };
 
-/** Finds walked nodes by declaration and part, a text part's typed as the object it is. */
+/** Finds the nodes walked whole by declaration and part, a text part's typed as the object it is. */
 export function nodeLookupOf(nodes: Nodes): NodeLookup {
   function nodeOf(declaration: unknown, part: ObjectPart): ObjectNode | undefined;
   function nodeOf(declaration: unknown, part: Part): SchemaNode | undefined;
   function nodeOf(declaration: unknown, part: Part): SchemaNode | undefined {
     const node = nodes.nodeOf(declaration, part);
-    return isObjectPart(part) && node?.type !== 'object' ? undefined : node;
+    const isObject = node?.type === 'object';
+    if (!isWhole(node) || (isObjectPart(part) && !isObject)) {
+      return undefined;
+    }
+    return node;
   }
   return nodeOf;
 }

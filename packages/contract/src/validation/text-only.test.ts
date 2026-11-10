@@ -1514,3 +1514,166 @@ describe('validateRoot: the time it takes to judge the examples of a text part',
     expect(order).toBeLessThan(orders.linear);
   });
 });
+
+describe('validateRoot: a text part beside a schema that fails', () => {
+  const dateRefusal = (location: string) => ({
+    kind: 'not-allowed',
+    location,
+    construct: 'z.date()',
+    instead: 'z.iso.datetime()',
+    alsoIn: [],
+  });
+  const guardWith = (demands: { headers?: z.ZodObject; query?: z.ZodObject }) =>
+    defineGuard({ name: 'userToken', description: 'A signed-in user', demands });
+
+  test('a nullable query param beside a date in the query tells both', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { query: headersOf({ tenant: z.string().nullable(), placedAt: z.date() }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          location: `${endpointAt} input.query.tenant`,
+          rule: 'nullable-text',
+          message: 'A query param is never nullable: tenant',
+        },
+        dateRefusal(`${endpointAt} input.query.placedAt`),
+      ],
+    });
+  });
+
+  test.each(['query', 'headers'] as const)(
+    'a nullable %s whose kind is not built tells the date alone, since its fix decides whether it is an object',
+    (part) => {
+      const nullable = z.date().nullable() as unknown as z.ZodObject;
+      const endpoint = defineEndpoint({ ...listing, input: { [part]: nullable } as never });
+
+      expect(validateEndpoint(endpoint)).toEqual({
+        kind: 'invalid',
+        failures: [dateRefusal(`${endpointAt} input.${part}`)],
+      });
+    },
+  );
+
+  test('a nullable query param whose kind is not built tells that it is never nullable, and the date', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { query: headersOf({ q: z.date().nullable() }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          location: `${endpointAt} input.query.q`,
+          rule: 'nullable-text',
+          message: 'A query param is never nullable: q',
+        },
+        dateRefusal(`${endpointAt} input.query.q`),
+      ],
+    });
+  });
+
+  test('a header that fails by a call tells that call alone, though an example of it cannot travel', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { headers: headersOf({ 'x-a': z.coerce.string().meta({ examples: ['a\nb'] }) }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'not-allowed',
+          location: `${endpointAt} input.headers.x-a`,
+          construct: 'z.coerce.*',
+          alsoIn: [],
+        },
+      ],
+    });
+  });
+
+  test('the examples of a headers object that fails are not read, though one cannot travel', () => {
+    const headers = headersOf({ 'x-a': z.string(), 'x-at': z.date() }).meta({
+      examples: [{ 'x-a': 'a\nb' }],
+    });
+    const endpoint = defineEndpoint({ ...listing, input: { headers } });
+
+    expect(validateEndpoint(endpoint)).toEqual({
+      kind: 'invalid',
+      failures: [dateRefusal(`${endpointAt} input.headers.x-at`)],
+    });
+  });
+
+  test('a query param that is an object holding a date tells that it is no text, and the date', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { query: headersOf({ range: z.object({ from: z.date() }) }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          location: `${endpointAt} input.query.range`,
+          rule: 'not-text',
+          message: `A query param ${text}, or a list of those: range`,
+        },
+        dateRefusal(`${endpointAt} input.query.range.from`),
+      ],
+    });
+  });
+
+  test('a list of dates is no text only once its date is replaced, so it tells the date alone', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { query: headersOf({ tags: z.array(z.date()) }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual({
+      kind: 'invalid',
+      failures: [dateRefusal(`${endpointAt} input.query.tags[]`)],
+    });
+  });
+
+  test('an Endpoint and its Guard declaring one header with different schemas fail beside a date', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      guards: [guardWith({ headers: z.object({ authorization: z.string() }) })],
+      input: { headers: headersOf({ authorization: z.jwt(), placed: z.date() }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          location: `${endpointAt} input.headers`,
+          rule: 'input-conflict',
+          message:
+            'A header has one schema across an Endpoint and its Guards: authorization differs between listOrders and userToken',
+        },
+        dateRefusal(`${endpointAt} input.headers.placed`),
+      ],
+    });
+  });
+
+  test('a list of dates against a Guard’s list of strings tells the date alone, since its fix agrees', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      guards: [guardWith({ query: z.object({ tags: z.array(z.string()) }) })],
+      input: { query: headersOf({ tags: z.array(z.date()) }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual({
+      kind: 'invalid',
+      failures: [dateRefusal(`${endpointAt} input.query.tags[]`)],
+    });
+  });
+});

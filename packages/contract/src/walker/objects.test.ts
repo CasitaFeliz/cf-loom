@@ -3,6 +3,7 @@ import { z } from 'zod';
 import * as zm from 'zod/mini';
 import type * as core from 'zod/v4/core';
 import { refusalsOf, summaryOf } from '../../test/failures.ts';
+import { orderOf, orders } from '../../test/growth.ts';
 import { randomAnnotations, randomSchemas, seededNext } from '../../test/random-schemas.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
@@ -330,6 +331,202 @@ describe('walkSchemas: intersections', () => {
         ],
       }),
     );
+  });
+});
+
+describe('walkSchemas: an intersection beside a schema that fails', () => {
+  const differing = 'an intersection of objects whose shared keys differ';
+  const dateAt = (at: string) => ({
+    kind: 'not-allowed',
+    at,
+    construct: 'z.date()',
+    instead: 'z.iso.datetime()',
+  });
+  const refusedAll = (failures: readonly object[]) => ({
+    located: [{ kind: 'not-allowed', failures }],
+    defs: {},
+  });
+
+  test('an intersection whose shared keys differ, beside a date in an item, tells both', () => {
+    const named = z.object({ id: z.string() });
+    const numbered = z.object({ id: z.number(), placedAt: z.date() });
+
+    expect(walkBody(named.and(numbered))).toEqual(
+      refusedAll([
+        { kind: 'not-allowed', at: '', construct: differing, instead: '.extend()' },
+        dateAt('[1].placedAt'),
+      ]),
+    );
+  });
+
+  test('a shared field that fails is not compared, so the intersection tells the failure alone', () => {
+    const named = z.object({ id: z.string() });
+    const dated = z.object({ id: z.date() });
+
+    expect(walkBody(named.and(dated))).toEqual(refusedAll([dateAt('[1].id')]));
+  });
+
+  test('a shared field that is a failing object against the same object whole is not compared', () => {
+    const failing = z.object({ a: z.object({ d: z.date() }) });
+    const whole = z.object({ a: z.object({ d: z.string() }) });
+
+    expect(walkBody(failing.and(whole))).toEqual(refusedAll([dateAt('[0].a.d')]));
+  });
+
+  test('a shared field that agrees is merged beside a field that fails', () => {
+    const named = z.object({ id: z.string(), name: z.string() });
+    const dated = z.object({ id: z.string(), placedAt: z.date() });
+
+    expect(walkBody(named.and(dated))).toEqual(refusedAll([dateAt('[1].placedAt')]));
+  });
+
+  test('an intersection of an object and a refused construct tells the construct alone', () => {
+    const named = z.object({ id: z.string() });
+
+    expect(walkBody(named.and(z.date()))).toEqual(refusedAll([dateAt('[1]')]));
+  });
+
+  test('an intersection of two refused constructs tells each, and no intersection', () => {
+    expect(walkBody(z.date().and(z.date()))).toEqual(refusedAll([dateAt('[0]'), dateAt('[1]')]));
+  });
+});
+
+describe('walkSchemas: a record key beside a schema that fails', () => {
+  const dateAt = (at: string) => ({
+    kind: 'not-allowed',
+    at,
+    construct: 'z.date()',
+    instead: 'z.iso.datetime()',
+  });
+  const refusedAll = (failures: readonly object[]) => ({
+    located: [{ kind: 'not-allowed', failures }],
+    defs: {},
+  });
+  const keyedBy = (key: unknown) => z.record(key as z.ZodString, z.string());
+
+  test('a key that is an object holding a date tells the key that is not a string, and the date', () => {
+    const key = z.object({ placedAt: z.date() });
+
+    expect(walkBody(keyedBy(key))).toEqual(
+      refusedAll([
+        { kind: 'not-allowed', at: '', construct: 'a z.record() key that is not a string' },
+        dateAt('{key}.placedAt'),
+      ]),
+    );
+  });
+
+  test('a nullable key that holds a date tells the nullable key, and the date', () => {
+    const key = z.union([z.string(), z.date()]).nullable();
+
+    expect(walkBody(keyedBy(key))).toEqual(
+      refusedAll([
+        { kind: 'not-allowed', at: '', construct: 'a nullable z.record() key' },
+        dateAt('{key}<|1>'),
+      ]),
+    );
+  });
+
+  test('a key that is refused itself tells only its own line, since its fix decides what it is', () => {
+    expect(walkBody(keyedBy(z.date()))).toEqual(refusedAll([dateAt('{key}')]));
+  });
+
+  test('a nullable key that is refused itself tells the nullable key, since every fix keeps it', () => {
+    expect(walkBody(keyedBy(z.date().nullable()))).toEqual(
+      refusedAll([
+        { kind: 'not-allowed', at: '', construct: 'a nullable z.record() key' },
+        dateAt('{key}'),
+      ]),
+    );
+  });
+
+  test('a key that is an intersection with a shared key that fails tells the date alone, since its fix decides whether the objects merge', () => {
+    const key = z.intersection(z.object({ k: z.date() }), z.object({ k: z.number() }));
+
+    expect(walkBody(keyedBy(key))).toEqual(refusedAll([dateAt('{key}[0].k')]));
+  });
+
+  test('a string key beside a value that fails is a record of the value it kept', () => {
+    expect(walkBody(z.record(z.string(), z.date()))).toEqual(refusedAll([dateAt('{}')]));
+  });
+});
+
+describe('walkSchemas: schemas that fail at many places are walked in time that grows with them', () => {
+  const sizes = { small: 500, large: 4_000 };
+
+  /** A walk of the schema `shape` builds for a size, built outside the time. */
+  const walkOf = (shape: (count: number) => z.ZodType) => (count: number) => {
+    const schema = shape(count);
+    return () => walkSchemas([{ at: bodyPlace, schema }], () => undefined);
+  };
+
+  /** The lines a walk tells, each once. */
+  const countOf = (walked: ReturnType<typeof walkSchemas>) => {
+    const [located] = refusalsOf(walked).located;
+    return located !== undefined && 'failures' in located ? located.failures.length : 0;
+  };
+
+  const differing = () => z.intersection(z.object({ k: z.string() }), z.object({ k: z.number() }));
+
+  test('a wide object of intersections whose shared keys differ', () => {
+    const walkWide = walkOf((count) =>
+      z.object(
+        Object.fromEntries(Array.from({ length: count }, (_, index) => [`f${index}`, differing()])),
+      ),
+    );
+
+    const walked = walkWide(sizes.large)();
+    const order = orderOf(walkWide, sizes, orders.linear);
+
+    expect(countOf(walked)).toBe(sizes.large);
+    expect(order).toBeLessThan(orders.linear);
+  });
+
+  test('a wide object of records keyed by records that hold a date', () => {
+    const keyed = () => z.record(z.record(z.string(), z.date()) as never, z.string());
+    const walkWide = walkOf((count) =>
+      z.object(
+        Object.fromEntries(Array.from({ length: count }, (_, index) => [`f${index}`, keyed()])),
+      ),
+    );
+
+    const walked = walkWide(sizes.large)();
+    const order = orderOf(walkWide, sizes, orders.linear);
+
+    expect(countOf(walked)).toBe(2 * sizes.large);
+    expect(order).toBeLessThan(orders.linear);
+  });
+
+  /** An intersection that differs at every one of `depth` levels, each level holding the one below. */
+  function aTowerOf(depth: number): z.ZodType {
+    let tower: z.ZodType = z.object({ k: z.string(), at: z.date() });
+    for (let level = 0; level < depth; level++) {
+      tower = z.intersection(
+        z.object({ k: z.string(), below: tower }),
+        z.object({ k: z.number() }),
+      );
+    }
+    return tower;
+  }
+
+  test('a wide object of towers of intersections that differ at every level', () => {
+    const depth = 20;
+    const walkWide = walkOf((count) =>
+      z.object(
+        Object.fromEntries(
+          Array.from({ length: count }, (_, index) => [`f${index}`, aTowerOf(depth)]),
+        ),
+      ),
+    );
+
+    const walked = walkWide(sizes.large / 4)();
+    const order = orderOf(
+      walkWide,
+      { small: sizes.small / 4, large: sizes.large / 4 },
+      orders.linear,
+    );
+
+    expect(countOf(walked)).toBe((sizes.large / 4) * (depth + 1));
+    expect(order).toBeLessThan(orders.linear);
   });
 });
 
