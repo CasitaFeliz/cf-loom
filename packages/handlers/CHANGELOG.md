@@ -1,5 +1,22 @@
 # @cf-loom/handlers
 
+## 1.0.0-rc.4
+
+### Patch Changes
+
+- fb46173: The packages are published to npmjs.com with public access and licensed `MIT OR Apache-2.0`: each package holds `LICENSE-MIT` and `LICENSE-APACHE`, and its `license` says `(MIT OR Apache-2.0)`. Versions 1.0.0-rc.0 to 1.0.0-rc.3 stay published as they are, public with the license `UNLICENSED`; 1.0.0-rc.4 is the first licensed version.
+- c4a2e85: A refusal shows a value that untyped code passed and its type does not allow by its kind, running none of the value's code. A limits setting or an `account` that `inProcess()`, `applyBrokerPlan` and `sqs()` refuse is shown as `util.inspect` prints it only when it is a string, a number, a boolean, `null`, `undefined` or a list held as data (its first 100 entries, three levels deep): an object reads `an object`, a function `a function`, a Symbol `a symbol`, a bigint `a bigint` and any other list `a list`, so a refusal no longer prints every key of a wide object, a Symbol's whole description or a bigint's every digit, or throws what the value's `[inspect.custom]`, getter or Proxy trap threw in place of its own line naming the place; an object that used to print its keys (`{ seconds: 30 }`) now reads `an object`. A validation line names a function, a Symbol or a bigint by its kind too, where it printed a function's source or a Symbol's whole description, and where a throwing `Symbol.toPrimitive` threw out of `generate` and `serve`. A revoked Proxy that `serve` or a Handler names no longer throws `Cannot perform 'IsArray'`: it is named `an object`. A Rejection's `code` and a returned `kind` that are an object, a function, a list, a Symbol or a bigint are named by their kind in the `InvalidOutcomeError` and the Fault's `cause` of a Handler, instead of `[object Object]`, a function's source or what the value's `toString` threw. `fault({ retryAfter: 1n })` and `serve({ maxBodyBytes: 1n })` refuse with `got a bigint`, where they said `got 1`, the text of a valid number, and a Fake Provider's mistake for a Symbol or a bigint `retryAfter` or Reserved code names `a symbol` or `a bigint`.
+- Updated dependencies [60c2979]
+- Updated dependencies [d4b12a0]
+- Updated dependencies [fb46173]
+- Updated dependencies [173a819]
+- Updated dependencies [51cbdc3]
+- Updated dependencies [7f2943f]
+- Updated dependencies [9112ec2]
+- Updated dependencies [c4a2e85]
+- Updated dependencies [116374b]
+  - @cf-loom/contract@1.0.0-rc.4
+
 ## 1.0.0-rc.3
 
 ### Patch Changes
