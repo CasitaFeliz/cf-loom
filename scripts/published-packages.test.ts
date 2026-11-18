@@ -11,8 +11,15 @@ type PackedPackage = {
   readonly name: string;
   readonly path: string;
   readonly files: ReadonlySet<string>;
-  readonly manifest: { readonly exports?: unknown; readonly bin?: unknown };
+  readonly manifest: {
+    readonly exports?: unknown;
+    readonly bin?: unknown;
+    readonly license?: unknown;
+    readonly publishConfig?: { readonly access?: unknown };
+  };
 };
+
+const licenseFiles = ['LICENSE-MIT', 'LICENSE-APACHE'];
 
 const root = join(import.meta.dirname, '..');
 
@@ -152,6 +159,40 @@ describe('the packages pnpm publishes', () => {
       const packing = packages.filter(({ files }) => files.has('ARCHITECTURE.md'));
 
       expect(packing.map(({ name }) => name)).toEqual([]);
+    });
+
+    it("holds LICENSE-MIT and LICENSE-APACHE in its folder and its pack, each the same as the repository's root one", () => {
+      const problems = packages.flatMap(({ name, path, files }) =>
+        licenseFiles.flatMap((file) => {
+          if (!files.has(file)) {
+            return [`${name}: ${file} missing`];
+          }
+          const same = readFileSync(join(path, file)).equals(readFileSync(join(root, file)));
+          return same ? [] : [`${name}: ${file} differs from the root one`];
+        }),
+      );
+
+      expect(problems).toEqual([]);
+    });
+
+    it('declares the license (MIT OR Apache-2.0)', () => {
+      const other = packages.filter(({ manifest }) => manifest.license !== '(MIT OR Apache-2.0)');
+
+      expect(other.map(({ name }) => name)).toEqual([]);
+    });
+
+    it('publishes with access public, as .changeset/config.json says', () => {
+      const changesetsConfig = JSON.parse(
+        readFileSync(join(root, '.changeset', 'config.json'), 'utf8'),
+      );
+      const notPublic = [
+        ...packages
+          .filter(({ manifest }) => manifest.publishConfig?.access !== 'public')
+          .map(({ name }) => name),
+        ...(changesetsConfig.access === 'public' ? [] : ['.changeset/config.json']),
+      ];
+
+      expect(notPublic).toEqual([]);
     });
   });
 

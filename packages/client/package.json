@@ -6,7 +6,7 @@
     "url": "git+https://github.com/CasitaFeliz/cf-loom.git",
     "directory": "packages/client"
   },
-  "license": "UNLICENSED",
+  "license": "(MIT OR Apache-2.0)",
   "sideEffects": false,
   "type": "module",
   "exports": {
@@ -22,7 +22,9 @@
   "files": [
     "dist",
     "src",
-    "!src/**/*.test.ts"
+    "!src/**/*.test.ts",
+    "LICENSE-MIT",
+    "LICENSE-APACHE"
   ],
   "devDependencies": {
     "@cf-loom/contract": "workspace:^",
@@ -38,6 +40,6 @@
     "node": ">=24"
   },
   "publishConfig": {
-    "access": "restricted"
+    "access": "public"
   }
 }
