@@ -161,7 +161,7 @@ describe('the packages pnpm publishes', () => {
       expect(packing.map(({ name }) => name)).toEqual([]);
     });
 
-    it('holds LICENSE-MIT and LICENSE-APACHE in its folder and its pack, each the same as the repository root one', () => {
+    it("holds LICENSE-MIT and LICENSE-APACHE in its folder and its pack, each the same as the repository's root one", () => {
       const problems = packages.flatMap(({ name, path, files }) =>
         licenseFiles.flatMap((file) => {
           if (!files.has(file)) {
