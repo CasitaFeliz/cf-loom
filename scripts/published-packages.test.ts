@@ -11,7 +11,12 @@ type PackedPackage = {
   readonly name: string;
   readonly path: string;
   readonly files: ReadonlySet<string>;
-  readonly manifest: { readonly exports?: unknown; readonly bin?: unknown };
+  readonly manifest: {
+    readonly exports?: unknown;
+    readonly bin?: unknown;
+    readonly license?: unknown;
+    readonly publishConfig?: { readonly access?: unknown };
+  };
 };
 
 const licenseFiles = ['LICENSE-MIT', 'LICENSE-APACHE'];
@@ -168,6 +173,26 @@ describe('the packages pnpm publishes', () => {
       );
 
       expect(problems).toEqual([]);
+    });
+
+    it('declares the license (MIT OR Apache-2.0)', () => {
+      const other = packages.filter(({ manifest }) => manifest.license !== '(MIT OR Apache-2.0)');
+
+      expect(other.map(({ name }) => name)).toEqual([]);
+    });
+
+    it('publishes with access public, as .changeset/config.json says', () => {
+      const changesetsConfig = JSON.parse(
+        readFileSync(join(root, '.changeset', 'config.json'), 'utf8'),
+      );
+      const notPublic = [
+        ...packages
+          .filter(({ manifest }) => manifest.publishConfig?.access !== 'public')
+          .map(({ name }) => name),
+        ...(changesetsConfig.access === 'public' ? [] : ['.changeset/config.json']),
+      ];
+
+      expect(notPublic).toEqual([]);
     });
   });
 

@@ -1,7 +1,7 @@
 {
   "name": "cf-loom",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "(MIT OR Apache-2.0)",
   "type": "module",
   "scripts": {
     "build": "tsc -b packages/cli/tsconfig.build.json examples/org-definitions/tsconfig.build.json && pnpm --dir examples/orders-service exec cf-loom package && tsc -b",
