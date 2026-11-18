@@ -58,24 +58,49 @@ export function isStringFormat(value: unknown): value is StringFormat {
   return typeof value === 'string' && Object.hasOwn(builtFormats, value);
 }
 
-/** A format zod builds from a regex and checks through a function: the calls that build it, and its regex in `z.regexes`. */
-export type RegexBuiltFormat = { readonly calls: readonly string[]; readonly regexName: string };
+/** A zod function that builds a format by its name: the one generated code calls, or another that builds it too. */
+export type ConstructorCall =
+  | (typeof builtFormats)[StringFormat]['call']
+  | AlsoBuiltBy<(typeof builtFormats)[StringFormat]>;
+
+type AlsoBuiltBy<Built> = Built extends { readonly alsoBuiltBy: readonly (infer Call)[] }
+  ? Call
+  : never;
 
 const hashAlgorithms = ['md5', 'sha1', 'sha256', 'sha384', 'sha512'] as const;
 const hashEncodings = ['hex', 'base64', 'base64url'] as const;
+
+type HashName = `${(typeof hashAlgorithms)[number]}_${(typeof hashEncodings)[number]}`;
+
+/** The name zod gives a check of a format it builds from a regex. */
+type RegexBuiltName = 'hex' | 'hostname' | 'currency_code' | HashName;
+
+/**
+ * A format zod builds from a regex and checks through a function: its name, the calls that build
+ * it and its regex in `z.regexes`, each a literal so a line that spells them holds no text from
+ * outside cf-loom.
+ */
+export type RegexBuiltFormat = {
+  readonly format: RegexBuiltName;
+  readonly calls: readonly ('z.hex' | 'z.hostname' | 'z.currencyCode' | 'z.hash')[];
+  readonly regexName: string;
+};
 
 /**
  * The formats zod builds from a regex, by the name zod gives each check: their check runs a
  * function, so the walk refuses them and names the `z.regexes` pattern that `.regex()` takes.
  */
 const regexBuiltFormats: ReadonlyMap<string, RegexBuiltFormat> = new Map([
-  ['hex', { calls: ['z.hex'], regexName: 'hex' }],
-  ['hostname', { calls: ['z.hostname'], regexName: 'hostname' }],
-  ['currency_code', { calls: ['z.currencyCode'], regexName: 'currencyCode' }],
+  ['hex', { format: 'hex', calls: ['z.hex'], regexName: 'hex' }],
+  ['hostname', { format: 'hostname', calls: ['z.hostname'], regexName: 'hostname' }],
+  [
+    'currency_code',
+    { format: 'currency_code', calls: ['z.currencyCode'], regexName: 'currencyCode' },
+  ],
   ...hashAlgorithms.flatMap((algorithm) =>
     hashEncodings.map((encoding): [string, RegexBuiltFormat] => {
-      const name = `${algorithm}_${encoding}`;
-      return [name, { calls: ['z.hash'], regexName: name }];
+      const name: HashName = `${algorithm}_${encoding}`;
+      return [name, { format: name, calls: ['z.hash'], regexName: name }];
     }),
   ),
 ]);
@@ -91,8 +116,8 @@ export function formatConstructorOf(format: StringFormat): string {
 }
 
 /** Every zod function that builds a format by its name, the one generated code calls first. */
-export function formatConstructorsOf(format: StringFormat): readonly string[] {
-  const built = builtFormats[format];
+export function formatConstructorsOf(format: StringFormat): readonly ConstructorCall[] {
+  const built: (typeof builtFormats)[StringFormat] = builtFormats[format];
   return 'alsoBuiltBy' in built ? [built.call, ...built.alsoBuiltBy] : [built.call];
 }
 

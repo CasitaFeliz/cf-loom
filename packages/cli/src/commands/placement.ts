@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { byCodePoint, joinedOf } from '@cf-loom/contract/internal';
+import { byCodePoint, joinedOf, wordOf } from '@cf-loom/contract/internal';
 import { realPathOf } from '../loading/index.ts';
 import {
   type Handled,
@@ -185,6 +185,6 @@ function adviceOf(replacements: readonly HandlerPath[]): string {
   if (others.length === 0) {
     return `${keep} for ${handledLabelOf(only.handled)}`;
   }
-  const candidates = replacements.map(({ handled }) => handledLabelOf(handled));
+  const candidates = replacements.map(({ handled }) => wordOf(handledLabelOf(handled)));
   return `${keep} for the declaration that replaces it, ${joinedOf(candidates, 'or')}`;
 }

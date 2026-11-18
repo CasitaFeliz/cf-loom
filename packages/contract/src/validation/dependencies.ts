@@ -12,6 +12,7 @@ import {
   type Root,
   reaches,
 } from '../declarations/index.ts';
+import { wordOf } from '../lines/index.ts';
 import { fieldStep, indexStep, inside, type Place } from '../walker/index.ts';
 import {
   type Declarations,
@@ -77,7 +78,7 @@ function providerFailures(
   if (providers.size < 2) {
     return [];
   }
-  const message = oneProviderSentence([...providers]);
+  const message = oneProviderSentence([...providers].map(wordOf));
   return [failure(at, 'dependency-selection', message)];
 }
 

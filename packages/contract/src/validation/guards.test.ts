@@ -53,17 +53,34 @@ const quota = defineGuard({
 
 /** The result of validating one Endpoint with these Attachments, cast where the types refuse them. */
 function validateGuards(guards: readonly Attachment[]) {
-  const endpoint = defineEndpoint({ ...listing, guards });
-  return validateEndpoint(endpoint);
+  return validateInPackage(rootOfGuards(guards));
 }
 
-function validateEndpoint(endpoint: Endpoint) {
+/** The Root of a Service whose one Endpoint attaches these Guards. */
+function rootOfGuards(guards: readonly Attachment[]): Root {
+  return rootOfEndpoint(defineEndpoint({ ...listing, guards }));
+}
+
+function rootOfEndpoint(endpoint: Endpoint): Root {
   const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [endpoint] });
-  return validateInPackage(defineService({ name: 'orders-service', groups: [orders] }));
+  return defineService({ name: 'orders-service', groups: [orders] });
 }
 
 function failed(location: string, rule: string, message: string) {
   return { kind: 'invalid', failures: [{ kind: 'declaration', location, rule, message }] };
+}
+
+const strippedKeySentence = 'A Qualifier holds only the keys its schema keeps when zod parses it';
+
+/** The failures of the keys a Qualifier's schema strips, each at its place in the Qualifier of the first Guard. */
+function stripped(...places: readonly string[]) {
+  const failures = places.map((place) => ({
+    kind: 'declaration',
+    location: `${guardsAt}[0].qualifier${place}`,
+    rule: 'qualifier-keys',
+    message: strippedKeySentence,
+  }));
+  return { kind: 'invalid', failures };
 }
 
 const guardsAt = 'endpoints.GET /orders (listOrders) guards';
@@ -278,27 +295,15 @@ describe('validateRoot: a Qualifier against its schema', () => {
       { guard: quota, qualifier: { perMinute: 60, extra: true } },
     ];
 
-    expect(validateGuards(guards)).toEqual(
-      failed(
-        `${guardsAt}[0].qualifier`,
-        'qualifier-keys',
-        'A Qualifier holds only the keys its schema keeps when zod parses it: extra',
-      ),
-    );
+    expect(validateGuards(guards)).toEqual(stripped('.extra'));
   });
 
-  test('two undeclared keys in an object Qualifier fail, listed closed by and', () => {
+  test('two undeclared keys in an object Qualifier fail, one failure each at its place', () => {
     const guards: readonly Attachment[] = [
       { guard: quota, qualifier: { perMinute: 60, extra: true, other: 1 } },
     ];
 
-    expect(validateGuards(guards)).toEqual(
-      failed(
-        `${guardsAt}[0].qualifier`,
-        'qualifier-keys',
-        'A Qualifier holds only the keys its schema keeps when zod parses it: extra and other',
-      ),
-    );
+    expect(validateGuards(guards)).toEqual(stripped('.extra', '.other'));
   });
 
   test('an undeclared key in an object nested in a Qualifier fails', () => {
@@ -306,13 +311,7 @@ describe('validateRoot: a Qualifier against its schema', () => {
       { guard: quota, qualifier: { perMinute: 60, burst: { size: 5, every: 'minute' } } },
     ];
 
-    expect(validateGuards(guards)).toEqual(
-      failed(
-        `${guardsAt}[0].qualifier`,
-        'qualifier-keys',
-        'A Qualifier holds only the keys its schema keeps when zod parses it: burst.every',
-      ),
-    );
+    expect(validateGuards(guards)).toEqual(stripped('.burst.every'));
   });
 
   test('an undeclared key in an object listed in a Qualifier fails', () => {
@@ -325,13 +324,7 @@ describe('validateRoot: a Qualifier against its schema', () => {
       { guard: roles, qualifier: [{ role: 'admin' }, { role: 'clerk', extra: true }] },
     ];
 
-    expect(validateGuards(guards)).toEqual(
-      failed(
-        `${guardsAt}[0].qualifier`,
-        'qualifier-keys',
-        'A Qualifier holds only the keys its schema keeps when zod parses it: 1.extra',
-      ),
-    );
+    expect(validateGuards(guards)).toEqual(stripped('[1].extra'));
   });
 
   test('a Qualifier that is a variant of a discriminated union holds only that variant’s keys', () => {
@@ -351,13 +344,7 @@ describe('validateRoot: a Qualifier against its schema', () => {
     ];
 
     expect(accepted.kind).toBe('valid');
-    expect(validateGuards(guards)).toEqual(
-      failed(
-        `${guardsAt}[0].qualifier`,
-        'qualifier-keys',
-        'A Qualifier holds only the keys its schema keeps when zod parses it: tenantId',
-      ),
-    );
+    expect(validateGuards(guards)).toEqual(stripped('.tenantId'));
   });
 
   test('a Qualifier the first option of a union refuses is judged by the option that parses it', () => {
@@ -373,13 +360,7 @@ describe('validateRoot: a Qualifier against its schema', () => {
       { guard: scope, qualifier: { region: 'eu', zone: 'west', extra: true } },
     ];
 
-    expect(validateGuards(guards)).toEqual(
-      failed(
-        `${guardsAt}[0].qualifier`,
-        'qualifier-keys',
-        'A Qualifier holds only the keys its schema keeps when zod parses it: extra',
-      ),
-    );
+    expect(validateGuards(guards)).toEqual(stripped('.extra'));
   });
 
   test('a Qualifier of an intersection holds the keys any of its items declares', () => {
@@ -399,13 +380,7 @@ describe('validateRoot: a Qualifier against its schema', () => {
     ];
 
     expect(accepted.kind).toBe('valid');
-    expect(validateGuards(guards)).toEqual(
-      failed(
-        `${guardsAt}[0].qualifier`,
-        'qualifier-keys',
-        'A Qualifier holds only the keys its schema keeps when zod parses it: extra',
-      ),
-    );
+    expect(validateGuards(guards)).toEqual(stripped('.extra'));
   });
 
   test('a Qualifier of a recursive schema is judged through its refs', () => {
@@ -421,13 +396,7 @@ describe('validateRoot: a Qualifier against its schema', () => {
       },
     ];
 
-    expect(validateGuards(guards)).toEqual(
-      failed(
-        `${guardsAt}[0].qualifier`,
-        'qualifier-keys',
-        'A Qualifier holds only the keys its schema keeps when zod parses it: children.0.extra',
-      ),
-    );
+    expect(validateGuards(guards)).toEqual(stripped('.children[0].extra'));
   });
 
   test('a Qualifier key the first matching option of a union drops fails, as zod strips it', () => {
@@ -443,13 +412,7 @@ describe('validateRoot: a Qualifier against its schema', () => {
       { guard: grant, qualifier: { role: 'admin', scope: 'orders' } },
     ];
 
-    expect(validateGuards(guards)).toEqual(
-      failed(
-        `${guardsAt}[0].qualifier`,
-        'qualifier-keys',
-        'A Qualifier holds only the keys its schema keeps when zod parses it: scope',
-      ),
-    );
+    expect(validateGuards(guards)).toEqual(stripped('.scope'));
   });
 
   test('the same Qualifier validates when the scoped option of the union comes first', () => {
@@ -469,7 +432,7 @@ describe('validateRoot: a Qualifier against its schema', () => {
     expect(validated.kind).toBe('valid');
   });
 
-  test('an undeclared key in a record value is named by its dotted path', () => {
+  test('an undeclared key in a record value fails at its place in the record', () => {
     const levels = defineGuard({
       name: 'levels',
       description: 'A level per tenant',
@@ -479,16 +442,10 @@ describe('validateRoot: a Qualifier against its schema', () => {
       { guard: levels, qualifier: { acme: { level: 1 }, globex: { level: 2, extra: true } } },
     ];
 
-    expect(validateGuards(guards)).toEqual(
-      failed(
-        `${guardsAt}[0].qualifier`,
-        'qualifier-keys',
-        'A Qualifier holds only the keys its schema keeps when zod parses it: globex.extra',
-      ),
-    );
+    expect(validateGuards(guards)).toEqual(stripped('.globex.extra'));
   });
 
-  test('an undeclared key in a tuple item is named by its dotted path', () => {
+  test('an undeclared key in a tuple item fails at its place in the tuple', () => {
     const pair = defineGuard({
       name: 'pair',
       description: 'A tenant and its limits',
@@ -498,13 +455,7 @@ describe('validateRoot: a Qualifier against its schema', () => {
       { guard: pair, qualifier: ['acme', { perMinute: 60, extra: true }] },
     ];
 
-    expect(validateGuards(guards)).toEqual(
-      failed(
-        `${guardsAt}[0].qualifier`,
-        'qualifier-keys',
-        'A Qualifier holds only the keys its schema keeps when zod parses it: 1.extra',
-      ),
-    );
+    expect(validateGuards(guards)).toEqual(stripped('[1].extra'));
   });
 
   test('an undeclared key named after an Object.prototype member is reported', () => {
@@ -512,13 +463,39 @@ describe('validateRoot: a Qualifier against its schema', () => {
       { guard: quota, qualifier: { perMinute: 60, constructor: true } },
     ];
 
-    expect(validateGuards(guards)).toEqual(
-      failed(
-        `${guardsAt}[0].qualifier`,
-        'qualifier-keys',
-        'A Qualifier holds only the keys its schema keeps when zod parses it: constructor',
-      ),
-    );
+    expect(validateGuards(guards)).toEqual(stripped('.constructor'));
+  });
+
+  test('keys holding a comma and a closing word each fail at their own quoted place', () => {
+    const guards: readonly Attachment[] = [
+      { guard: quota, qualifier: { perMinute: 60, 'a, b and c': 1, d: 2 } },
+    ];
+
+    expect(validateGuards(guards)).toEqual(stripped('."a, b and c"', '.d'));
+  });
+
+  test.for([
+    ['a key holding a dot', 'x.y', '."x.y"'],
+    ['an empty key', '', '.""'],
+    ['a key that reads as a list position, which is not one', '1', '.1'],
+    ['a non-ASCII key', 'café', '."café"'],
+    ['a lone surrogate', '\ud800', '."\\ud800"'],
+    ['a key holding a line break', 'a\nb', '."a\\nb"'],
+    ['a key holding a quote and a backslash', 'a"\\b', '."a\\"\\\\b"'],
+    ['a key every object already has', 'constructor', '.constructor'],
+  ] as const)('an undeclared key that is %s fails at %s', ([, key, place]) => {
+    const guards: readonly Attachment[] = [
+      { guard: quota, qualifier: { perMinute: 60, [key]: true } },
+    ];
+
+    expect(validateGuards(guards)).toEqual(stripped(place));
+  });
+
+  test('an own __proto__ key, as JSON.parse makes one, fails at its place', () => {
+    const qualifier: unknown = JSON.parse('{"perMinute":60,"__proto__":{"a":1}}');
+    const guards: readonly Attachment[] = [{ guard: quota, qualifier }];
+
+    expect(validateGuards(guards)).toEqual(stripped('.__proto__'));
   });
 
   test('a Qualifier is not judged while its schema holds a construct that is not allowed', () => {
@@ -580,13 +557,22 @@ function oneOf<Item>(next: () => number, items: readonly [Item, ...Item[]]): Ite
   return items[Math.floor(next() * items.length)] ?? items[0];
 }
 
+/** Keys no schema of a draw declares, which a Qualifier may still hold: a separator, a closing word, a dot, nothing, a position's text, a name every object has. */
+const undeclaredKeys = ['a, b', 'c and d', 'x.y', '', '1', '__proto__'] as const;
+
+function isOdd(key: string): boolean {
+  return (undeclaredKeys as readonly string[]).includes(key);
+}
+
 /** An object whose keys come from one small pool, so the options of a union share and shadow keys. */
 function anObject(next: () => number, depth: number, tag?: string): ObjectSample {
   const pool = { a: text, b: count, c: aSample(next, depth - 1), d: text };
   const declared = Object.entries(pool).filter(() => next() < 0.5);
   const optional = new Set(declared.filter(() => next() < 0.3).map(([key]) => key));
   const declaredKeys = new Set(declared.map(([key]) => key));
-  const undeclared = Object.keys(pool).filter((key) => !declaredKeys.has(key));
+  const undeclared = [...Object.keys(pool), ...undeclaredKeys].filter(
+    (key) => !declaredKeys.has(key),
+  );
   const shape = Object.fromEntries(
     declared.map(([key, field]) => [
       key,
@@ -594,7 +580,7 @@ function anObject(next: () => number, depth: number, tag?: string): ObjectSample
     ]),
   );
   const present = declared.filter(([key]) => !optional.has(key) || next() < 0.5);
-  const extras = undeclared.filter(() => next() < 0.5);
+  const extras = undeclared.filter((key) => next() < (isOdd(key) ? 0.2 : 0.5));
   return {
     schema: z.object(tag === undefined ? shape : { kind: z.literal(tag), ...shape }),
     nextValue: () => ({
@@ -637,6 +623,9 @@ function aRecord(next: () => number, depth: number): Sample {
     nextValue: () => ({
       x: member.nextValue(),
       ...(next() < 0.5 ? { y: member.nextValue() } : {}),
+      ...(next() < 0.3
+        ? Object.fromEntries([[oneOf(next, undeclaredKeys), member.nextValue()]])
+        : {}),
     }),
   };
 }
@@ -675,49 +664,48 @@ function aSample(next: () => number, depth: number): Sample {
   return build(next, depth);
 }
 
-/** Every key and index of a value, as paths. */
-function pathsOf(value: unknown, at: readonly string[] = []): readonly (readonly string[])[] {
+/** A step of a path into a Qualifier: a key of an object or a record, a position of a list or a tuple. */
+type Down =
+  | { readonly kind: 'field'; readonly name: string }
+  | { readonly kind: 'index'; readonly index: number };
+
+/** Every key and position of a value, as the steps down to it. */
+function pathsOf(value: unknown, at: readonly Down[] = []): readonly (readonly Down[])[] {
   if (typeof value !== 'object' || value === null) {
     return [];
   }
-  return Object.entries(value).flatMap(([key, member]) => [
-    [...at, key],
-    ...pathsOf(member, [...at, key]),
-  ]);
+  const isList = Array.isArray(value);
+  return Object.entries(value).flatMap(([key, member]) => {
+    const step: Down = isList
+      ? { kind: 'index', index: Number(key) }
+      : { kind: 'field', name: key };
+    return [[...at, step], ...pathsOf(member, [...at, step])];
+  });
 }
 
-/** The outermost paths of `value` that `parsed` lacks: what zod's parse stripped. */
-function strippedPathsOf(value: unknown, parsed: unknown): readonly string[] {
-  const kept = new Set(pathsOf(parsed).map((path) => path.join('.')));
+/** The outermost paths of `value` that `parsed` lacks, as steps: what zod's parse stripped, in the order of their steps. */
+function strippedPathsOf(value: unknown, parsed: unknown): readonly (readonly Down[])[] {
+  const kept = new Set(pathsOf(parsed).map((path) => JSON.stringify(path)));
   return pathsOf(value)
-    .filter((path) => !kept.has(path.join('.')))
-    .filter((path) => path.length === 1 || kept.has(path.slice(0, -1).join('.')))
-    .map((path) => path.join('.'))
-    .sort();
+    .filter((path) => !kept.has(JSON.stringify(path)))
+    .filter((path) => path.length === 1 || kept.has(JSON.stringify(path.slice(0, -1))))
+    .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
 }
 
-type Validated = ReturnType<typeof validateGuards>;
-
-type Reported = Extract<Validated, { readonly kind: 'invalid' }>['failures'][number];
-
-type KeysReported = Extract<Reported, { readonly kind: 'declaration' }>;
-
-function isQualifierKeysFailure(reported: Reported): reported is KeysReported {
-  return reported.kind === 'declaration' && reported.rule === 'qualifier-keys';
-}
-
-/** The keys a message lists, `a, b and c`; none of the drawn keys holds a comma or the word `and`. */
-function keysNamedBy(reported: KeysReported): readonly string[] {
-  return reported.message.slice(reported.message.indexOf(': ') + 2).split(/, | and /);
-}
-
-/** The paths a validated Root names in its `qualifier-keys` failures. */
-function reportedKeysOf(validated: Validated): readonly string[] {
+/** The steps below the Qualifier of each `qualifier-keys` failure of a validated Root. */
+function reportedPathsOf(root: Root): readonly (readonly unknown[])[] {
+  const validated = validateRoot(root, aRootPackage(root));
   if (validated.kind === 'valid') {
     return [];
   }
-  return validated.failures.filter(isQualifierKeysFailure).flatMap(keysNamedBy).sort();
+  return validated.failures
+    .filter((reported) => reported.kind === 'declaration' && reported.rule === 'qualifier-keys')
+    .map((reported) => reported.steps.slice(qualifierStepCount))
+    .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
 }
+
+/** The steps from the Endpoint to its first Guard's Qualifier: `guards`, `[0]` and `qualifier`. */
+const qualifierStepCount = 3;
 
 describe('validateRoot: a Qualifier whose schema fails is never parsed', () => {
   test('a .refine() on a Qualifier’s schema, which fails the walk, never runs', () => {
@@ -740,22 +728,29 @@ describe('validateRoot: a Qualifier whose schema fails is never parsed', () => {
 });
 
 describe('validateRoot: a Qualifier holds the keys zod keeps when it parses it', () => {
-  test('generate names exactly the keys zod strips, whatever the union, record, array or tuple around them', () => {
+  test('each key zod strips is one failure at its steps, whatever the union, record, array or tuple around it', () => {
     const next = seededNext(214);
     let stripping = 0;
+    const strippedOdd = new Set<string>();
     for (let draw = 0; draw < 300; draw += 1) {
       const { schema, nextValue } = aSample(next, 2);
       const qualifier = nextValue();
       const guard = defineGuard({ name: 'scope', description: 'A scope', qualifier: schema });
       const stripped = strippedPathsOf(qualifier, z.parse(schema, qualifier));
       stripping += stripped.length === 0 ? 0 : 1;
+      for (const path of stripped) {
+        const last = path.at(-1);
+        if (last?.kind === 'field' && isOdd(last.name)) {
+          strippedOdd.add(last.name);
+        }
+      }
 
-      const validated = validateGuards([{ guard, qualifier } as Attachment]);
+      const reported = reportedPathsOf(rootOfGuards([{ guard, qualifier } as Attachment]));
 
-      expect(reportedKeysOf(validated), `draw ${draw}`).toEqual(stripped);
-      expect(validated.kind, `draw ${draw}`).toBe(stripped.length === 0 ? 'valid' : 'invalid');
+      expect(reported, `draw ${draw}`).toEqual(stripped);
     }
     expect(stripping).toBeGreaterThan(30);
+    expect([...strippedOdd].sort()).toEqual([...undeclaredKeys].sort());
   });
 });
 
@@ -815,18 +810,14 @@ describe('validateRoot: a deep Qualifier', () => {
     expect(validateGuards([{ guard: chained, qualifier }]).kind).toBe('valid');
   });
 
-  test('a key zod strips 200 objects deep, under the 256 levels a Snapshot holds, fails naming its dotted path', () => {
+  test('a key zod strips 200 objects deep, under the 256 levels a Snapshot holds, fails at its place', () => {
     let qualifier: object = { extra: true };
     for (let level = 0; level < 200; level++) {
       qualifier = { next: qualifier };
     }
 
     expect(validateGuards([{ guard: chained, qualifier }])).toEqual(
-      failed(
-        `${guardsAt}[0].qualifier`,
-        'qualifier-keys',
-        `A Qualifier holds only the keys its schema keeps when zod parses it: ${'next.'.repeat(200)}extra`,
-      ),
+      stripped(`${'.next'.repeat(200)}.extra`),
     );
   });
 });

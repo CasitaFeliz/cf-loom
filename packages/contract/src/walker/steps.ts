@@ -1,3 +1,4 @@
+import { type Token, tokenOf } from '../lines/index.ts';
 import type { Path } from './nodes.ts';
 
 /** The parts of an Endpoint, a Guard or a Rejection that a difference sits under. */
@@ -141,14 +142,6 @@ function snapshotSegmentsOf(step: Step): Path {
   }
 }
 
-/** What a name or a text may be on a line without quotes. */
-const plainToken = /^[\w@/$-]+$/;
-
-/** A text as it stands on a line: itself when plain, else as JSON, so it reads as one token. */
-export function tokenOf(text: string): string {
-  return plainToken.test(text) ? text : JSON.stringify(text);
-}
-
 /** How a recursive schema is named on a line, as a failure's site or where a Change's path starts: `defs.<id>`. */
 export function defTextOf(name: string): string {
   return `defs.${tokenOf(name)}`;
@@ -160,11 +153,11 @@ export function defTextOf(name: string): string {
  * union's option, `{}` a record's value, `{key}` its key and `<discriminator=value>` a variant;
  * none when there are no steps.
  */
-export function authorPathOf(steps: readonly Step[]): string | null {
+export function authorPathOf(steps: readonly Step[]): Token | null {
   if (steps.length === 0) {
     return null;
   }
-  return steps.map((step, position) => textOf(step, position === 0)).join('');
+  return steps.map((step, position) => textOf(step, position === 0)).join('') as Token;
 }
 
 /**

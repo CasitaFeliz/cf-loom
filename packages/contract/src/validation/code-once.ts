@@ -1,4 +1,4 @@
-import { joinedOf } from '../lines/index.ts';
+import { joinedOf, type Token, wordOf, wordsOf } from '../lines/index.ts';
 import type { Place } from '../walker/index.ts';
 import {
   type Declarations,
@@ -11,7 +11,7 @@ import { definitionsPackageOf, originTextOf, packageLabelOf } from './provenance
 import type { ImportedDefinitions } from './validate.ts';
 
 /** Where a code is first declared, and where each of its declarations came from. */
-type Declared = { readonly at: Place; readonly named: readonly string[] };
+type Declared = { readonly at: Place; readonly named: readonly Token[] };
 
 /**
  * A code is declared once: by one Rejection the Root reaches, or one Standard Rejection resolving
@@ -43,45 +43,51 @@ function sourceOf(
   { root }: Declarations,
   packages: readonly ImportedDefinitions[],
   rejection: unknown,
-): string {
+): Token {
   const provenance = definitionsPackageOf(packages, rejection);
   switch (provenance.kind) {
     case 'origin':
       return sourceNamedBy(provenance.package);
     case 'none':
     case 'ambiguous':
-      return root.kind === 'definitions' ? 'the Definitions Package' : 'the Contract';
+      return root.kind === 'definitions'
+        ? wordsOf(['the', 'Definitions', 'Package'])
+        : wordsOf(['the', 'Contract']);
   }
 }
 
 /** The package a Rejection came from, as an origin names it, or as its package.json's name or path when it lacks a name or a version. */
-function sourceNamedBy(origin: ImportedDefinitions): string {
+function sourceNamedBy(origin: ImportedDefinitions): Token {
   switch (origin.kind) {
     case 'identified':
-      return originTextOf(origin);
+      return wordOf(originTextOf(origin));
     case 'unnamed':
     case 'unversioned':
       return packageLabelOf(origin);
   }
 }
 
-function standardSourceOf({ name }: ResolvedStandard): string {
-  return `the ${textOf(name)} Standard Rejection`;
+function standardSourceOf({ name }: ResolvedStandard): Token {
+  return wordsOf(['the', wordOf(textOf(name)), 'Standard', 'Rejection']);
 }
 
-/** The sources in the order met, each once, with how many declarations it gave: `the Contract, twice`. */
-function listOf(named: readonly string[]): string {
-  const counts = new Map<string, number>();
+/** The sources in the order met, each once, with how many declarations it gave: `the Contract twice`. */
+function listOf(named: readonly Token[]): string {
+  const counts = new Map<Token, number>();
   for (const source of named) {
     counts.set(source, (counts.get(source) ?? 0) + 1);
   }
-  const entries = [...counts].map(([source, count]) => `${source}${timesOf(count)}`);
-  return joinedOf(entries, 'and');
+  return joinedOf(
+    [...counts].map(([source, count]) => timesOf(source, count)),
+    'and',
+  );
 }
 
-function timesOf(count: number): string {
+function timesOf(source: Token, count: number): Token {
   if (count === 1) {
-    return '';
+    return source;
   }
-  return count === 2 ? ', twice' : `, ${count} times`;
+  return count === 2
+    ? wordsOf([source, 'twice'])
+    : wordsOf([source, wordOf(String(count)), 'times']);
 }

@@ -1,3 +1,4 @@
+import { dottedPathOf } from '../src/internal/index.ts';
 import { lineBreaks } from './line-breaks.ts';
 import { drawnName, drawnVersion } from './random-broker-plans.ts';
 
@@ -87,9 +88,9 @@ export function placeOf(site: TextSite, text: string): Path {
   return site.isKey ? [...site.path.slice(0, -1), text] : site.path;
 }
 
-/** A path as a plan's refusal writes it: its steps joined by dots. */
+/** A path as a plan's refusal writes it: its keys joined by dots, each as one key. */
 export function dottedOf(path: Path): string {
-  return path.join('.');
+  return dottedPathOf(path);
 }
 
 const outsideCharacters: readonly string[] = [

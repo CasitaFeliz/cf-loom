@@ -3,6 +3,7 @@ import {
   type ImportedContractPackage,
   type ImportedDefinitions,
   identityLineOf,
+  joinedOf,
   packageLabelOf,
   standardRejectionsSourceOf,
 } from '@cf-loom/contract/internal';
@@ -43,8 +44,8 @@ export function resolvePackages(
       return failed(`${none}: name the definitions a Definitions Package exports`);
     }
     case 'ambiguous': {
-      const [first, second] = provenance.packages.map(packageLabelOf);
-      const both = `exported by both ${first} and ${second}`;
+      const [first, second] = provenance.packages;
+      const both = `exported by both ${joinedOf([packageLabelOf(first), packageLabelOf(second)], 'and')}`;
       const neither = 'and neither imports it from the other: import it from one package';
       return failed(`standardRejections is ${both}, ${neither}`);
     }

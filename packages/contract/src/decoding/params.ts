@@ -1,4 +1,4 @@
-import { joinedOf } from '../lines/index.ts';
+import { joinedOf, wordOf } from '../lines/index.ts';
 import { type EndpointSnapshot, isDeclared, type PublishedSnapshot } from '../snapshot/index.ts';
 import type { Problem } from '../validation/index.ts';
 import type { ObjectNode, Path } from '../walker/index.ts';
@@ -49,7 +49,12 @@ function paramFieldProblemsAt(
 ): readonly Problem[] {
   const named = Object.keys(object.fields).length === params.length;
   if (!named || !params.every((name) => Object.hasOwn(object.fields, name))) {
-    return [{ at, reason: `declares other fields than the params: ${joinedOf(params, 'and')}` }];
+    return [
+      {
+        at,
+        reason: `declares other fields than the params: ${joinedOf(params.map(wordOf), 'and')}`,
+      },
+    ];
   }
   return params
     .filter((name) => object.fields[name]?.required === false)

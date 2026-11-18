@@ -12,7 +12,7 @@ import { connect } from '@nats-io/transport-node';
 import { afterAll, beforeAll, describe, expect, onTestFinished, test } from 'vitest';
 import { z } from 'zod';
 import { aHookThatThrows } from '../../../contract/test/foreign-values.ts';
-import { lineBreakPattern, lineBreaks } from '../../../contract/test/line-breaks.ts';
+import { lineBreakPattern, lineBreaks, quotedItemOf } from '../../../contract/test/line-breaks.ts';
 import { aServiceOfLongestNames, planOf } from '../../test/broker-plans.ts';
 import { stopServerUnder, withMethods } from '../../test/connections.ts';
 import {
@@ -1172,8 +1172,8 @@ describe('what applyBrokerPlan refuses', () => {
 
 describe('applyBrokerPlan: a refusal whose places hold a line break', () => {
   test.for(lineBreaks)(
-    'limits keys holding %s are refused on one line each, the break written escaped',
-    async ([, code, visible]) => {
+    'limits keys holding %s are refused on one line each, quoted, the break written escaped',
+    async ([, code]) => {
       const character = String.fromCharCode(code);
       const orders = anOrders(aPrefix());
       const service = aConnect();
@@ -1189,9 +1189,9 @@ describe('applyBrokerPlan: a refusal whose places hold a line break', () => {
 
       expect(error.message.split(lineBreakPattern).sort()).toEqual(
         [
-          `limits.other${visible}key is a key JetStreamBrokerLimits does not define`,
-          `limits.streamDefaults.max${visible}age is a key JetStreamBrokerLimits does not define`,
-          `limits.streams.${orders.stream}.re${visible}plica is a key JetStreamBrokerLimits does not define`,
+          `limits.${quotedItemOf(`other${character}key`)} is a key JetStreamBrokerLimits does not define`,
+          `limits.streamDefaults.${quotedItemOf(`max${character}age`)} is a key JetStreamBrokerLimits does not define`,
+          `limits.streams.${orders.stream}.${quotedItemOf(`re${character}plica`)} is a key JetStreamBrokerLimits does not define`,
         ].sort(),
       );
       expect(service.opened).toHaveLength(0);
@@ -1248,8 +1248,8 @@ describe('applyBrokerPlan: a refusal whose places hold a line break', () => {
   );
 
   test.for(lineBreaks)(
-    'a plan whose Stream is named with %s is refused before it connects, on one line, the break written escaped',
-    async ([, code, visible]) => {
+    'a plan whose Stream is named with %s is refused before it connects, on one line, quoted, the break written escaped',
+    async ([, code]) => {
       const prefix = aPrefix();
       const orders = anOrders(prefix);
       const stream = `${orders.stream}${String.fromCharCode(code)}`;
@@ -1264,7 +1264,7 @@ describe('applyBrokerPlan: a refusal whose places hold a line break', () => {
       const error = await rejectionOf(applyBrokerPlan(connecting, plan, readFromJson({})));
 
       expect(error.message.split(lineBreakPattern)).toEqual([
-        `The value is not the Broker plan of the document cf-loom broker-plan --json prints: streams.${orders.stream}${visible} is not a Stream name: a Service name after the prefix`,
+        `The value is not the Broker plan of the document cf-loom broker-plan --json prints: streams.${quotedItemOf(stream)} is not a Stream name: a Service name after the prefix`,
       ]);
       expect(service.opened).toHaveLength(0);
     },

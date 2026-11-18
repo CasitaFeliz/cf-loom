@@ -7,6 +7,7 @@ import {
   isRoot,
   joinedOf,
   type Root,
+  wordOf,
 } from '@cf-loom/contract/internal';
 import { type ImportedPackage, importedRootOf } from './imported-packages.ts';
 import { rootFiles, rootPlaces } from './roots.ts';
@@ -87,7 +88,7 @@ export function splitRoot(exported: Readonly<Record<string, unknown>>): SplitRoo
     return { kind: 'failed', reason: noRoot };
   }
   if (more.length > 0) {
-    const names = roots.map(({ name }) => name);
+    const names = roots.map(({ name }) => wordOf(name));
     return { kind: 'failed', reason: `exports more than one Root: ${joinedOf(names, 'and')}` };
   }
   const { [first.name]: _root, ...exports } = exported;

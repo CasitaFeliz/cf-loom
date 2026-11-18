@@ -56,7 +56,7 @@ function functionFormatRefusalOf(format: string): Refused {
   const regexBuilt = regexBuiltFormatOf(format);
   return regexBuilt === undefined
     ? refusedStringFormat(format)
-    : refusedRegexBuiltFormat(format, regexBuilt);
+    : refusedRegexBuiltFormat(regexBuilt);
 }
 
 /** A format zod builds from its options: the pattern must be the one zod builds for them. */

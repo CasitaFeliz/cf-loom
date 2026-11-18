@@ -134,7 +134,7 @@ function variableRefusalOf(field: LayoutField, path: string): string | undefined
   if (foreign === undefined) {
     return undefined;
   }
-  const braced = taken.map((name) => `{${name}}`);
+  const braced = taken.map((name) => `{${name}}` as const);
   const takes = taken.length === 0 ? 'takes no variable' : `takes only ${joinedOf(braced, 'and')}`;
   return `holds {${foreign}}, but ${owner} ${takes}`;
 }
@@ -160,7 +160,7 @@ function folderRefusalOf(_field: LayoutField, path: string): string | undefined 
   if (!folders.some(isNamedLikeFile)) {
     return undefined;
   }
-  return `has a folder ending ${handlerEnding} or ${generatedEnding}`;
+  return `has a folder ending ${joinedOf([handlerEnding, generatedEnding], 'or')}`;
 }
 
 /** TypeScript reads `x.d.handler.ts` as the declarations of `x.handler`, not as a module. */

@@ -9,7 +9,7 @@ import {
   requiresEarlierSentence,
   takesNoQualifierSentence,
 } from '../declarations/index.ts';
-import { joinedOf } from '../lines/index.ts';
+import { wordOf } from '../lines/index.ts';
 import {
   fieldStep,
   indexStep,
@@ -94,6 +94,8 @@ function noAttachmentFailures(at: Place, attachment: unknown): readonly Declarat
   return [failure(at, 'not-an-attachment', 'An Attachment is a Guard or { guard, qualifier }')];
 }
 
+const strippedKeySentence = 'A Qualifier holds only the keys its schema keeps when zod parses it';
+
 /** A Qualifier is a value its schema accepts whose parse drops no key. */
 export function qualifierFailures(
   located: LocatedEndpoint,
@@ -131,13 +133,10 @@ function valueFailures(
     const message = `${textOf(guard.name)} takes a Qualifier its schema accepts`;
     return [failure(qualifierAt, 'qualifier-value', message)];
   }
-  const stripped = strippedKeysOf(attachment.qualifier, parsed.data);
-  if (stripped.length === 0) {
-    return [];
-  }
-  const keys = joinedOf(stripped, 'and');
-  const message = `A Qualifier holds only the keys its schema keeps when zod parses it: ${keys}`;
-  return [failure(qualifierAt, 'qualifier-keys', message)];
+  const stripped = strippedKeysOf(attachment.qualifier, parsed.data, qualifierAt.steps);
+  return stripped.map((steps) =>
+    failure({ ...qualifierAt, steps }, 'qualifier-keys', strippedKeySentence),
+  );
 }
 
 /** A Guard whose `qualifier` is no schema is the schema rule's; its Attachments are not judged. */
@@ -171,7 +170,7 @@ function orderFailures(
   if (missing.length === 0) {
     return [];
   }
-  const message = requiresEarlierSentence(textOf(guard.name), missing);
+  const message = requiresEarlierSentence(textOf(guard.name), missing.map(wordOf));
   return [failure(at, 'guard-order', message)];
 }
 

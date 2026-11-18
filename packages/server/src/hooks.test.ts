@@ -20,7 +20,7 @@ import {
 } from '@cf-loom/handlers';
 import { afterEach, describe, expect, expectTypeOf, test, vi } from 'vitest';
 import { z } from 'zod';
-import { lineBreakPattern, lineBreaks } from '../../contract/test/line-breaks.ts';
+import { lineBreakPattern, lineBreaks, quotedItemOf } from '../../contract/test/line-breaks.ts';
 import { printedBy } from '../../contract/test/printed.ts';
 import {
   type AnsweredRequest,
@@ -195,7 +195,7 @@ describe('serve: onServiceFault', () => {
 
   test.for(lineBreaks)(
     'without it, a Caller’s record key holding %s, echoed into a body that breaks the Success, is logged on one line per Issue',
-    async ([, code, visible]) => {
+    async ([, code]) => {
       const printed = printedBy('error');
       const key = `a${String.fromCharCode(code)}b`;
       const tally = defineEndpoint({
@@ -227,11 +227,50 @@ describe('serve: onServiceFault', () => {
 
       expect(response.status).toBe(500);
       expect(printed.map((line) => line.split(lineBreakPattern))).toEqual([
-        [`tally: success.body.a${visible}b invalid_type: ${expectedMessage}`],
+        [`tally: success.body.${quotedItemOf(key)} invalid_type: ${expectedMessage}`],
         [`tally: success.body.other invalid_type: ${expectedMessage}`],
       ]);
     },
   );
+
+  test('without it, a Caller’s record keys holding a dot and a space, echoed into a body that breaks the Success, are logged one item each', async () => {
+    const printed = printedBy('error');
+    const tally = defineEndpoint({
+      name: 'tally',
+      method: 'POST',
+      path: '/tally',
+      visibility: 'public',
+      description: 'Echoes the counts as words',
+      input: { body: z.record(z.string(), z.number()) },
+      success: {
+        status: 200,
+        body: z.object({ items: z.array(z.record(z.string(), z.string())) }),
+      },
+    });
+    const tallyContract = defineService({
+      name: 'orders-service',
+      groups: [defineGroup({ name: 'tallies', description: 'Tallies', endpoints: [tally] })],
+    });
+    const tallyHandlers = {
+      endpoints: { tally: handle(tally, ({ body }) => success(tally, { items: [body] } as never)) },
+      guards: {},
+    };
+    const headers = { 'content-type': 'application/json' };
+    const body = JSON.stringify({ 'a.b': 1, 'c d': 2 });
+
+    const response = await serve(
+      tallyContract,
+      tallyHandlers,
+      {},
+    )(new Request('http://test/tally', { method: 'POST', headers, body }));
+
+    expect(response.status).toBe(500);
+    const expectedMessage = 'Invalid input: expected string, received number';
+    expect(printed).toEqual([
+      `tally: success.body.items.0."a.b" invalid_type: ${expectedMessage}`,
+      `tally: success.body.items.0."c d" invalid_type: ${expectedMessage}`,
+    ]);
+  });
 
   test.for(['%o', '%c', '%s'])(
     'without it, a Fault whose message holds the console format specifier %s is printed as its line, then its cause',

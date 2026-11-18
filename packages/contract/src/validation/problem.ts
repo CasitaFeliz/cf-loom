@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { $ZodIssue } from 'zod/v4/core';
+import { dottedPathOf } from '../lines/index.ts';
 import type { Path } from '../walker/index.ts';
 import { isAbsentAt } from '../written/index.ts';
 import { issueWordsOf } from './issue-words.ts';
@@ -48,5 +49,5 @@ export function problemLineOf(problem: Problem): string {
 
 /** Where a decoded value breaks its definition, its keys joined by dots, `(root)` for none. */
 function locationOf(at: Path): string {
-  return at.length === 0 ? '(root)' : at.join('.');
+  return at.length === 0 ? '(root)' : dottedPathOf(at);
 }

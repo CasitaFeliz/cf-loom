@@ -23,6 +23,7 @@ import {
   textOfValue,
   textPartsOf,
   validateRoot,
+  writtenTextOf,
 } from '../internal/index.ts';
 
 /** Validates a Root as the package it names: its package.json named as the Root is. */
@@ -1467,7 +1468,7 @@ describe('validateRoot: the time it takes to judge the examples of a text part',
       judgingHeaders(z.object({ 'x-s': z.string().meta({ examples: examplesOf(size) }) }));
 
     const order = orderOf(told, { small: 1000, large: 8000 }, orders.linear);
-    const named = examplesOf(8000).map((example) => JSON.stringify(example));
+    const named = examplesOf(8000).map(writtenTextOf);
     const values = joinedOf(named, 'and');
 
     expect(summarized(told(8000)())).toEqual(

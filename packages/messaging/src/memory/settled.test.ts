@@ -8,8 +8,10 @@ import {
 import { fault, handle, type MessageFault, type MessageMeta, readersOf } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
-import { lineBreakPattern, lineBreaks } from '../../../contract/test/line-breaks.ts';
+import { lineBreakPattern, lineBreaks, quotedItemOf } from '../../../contract/test/line-breaks.ts';
+import { readWords } from '../../../contract/test/line-reading.ts';
 import { printedBy } from '../../../contract/test/printed.ts';
+import { seededNext } from '../../../contract/test/random-schemas.ts';
 import type { ConsumedFault, Messaging, MessagingOptions } from '../index.ts';
 import { type MemoryMessaging, memory } from './index.ts';
 
@@ -193,7 +195,7 @@ describe('settled()', () => {
 
   test.for(lineBreaks.filter(([name]) => name !== 'LF' && name !== 'CR'))(
     'two Faults of Messages whose Fact ids hold %s make settled() reject with a line each, and the console get a line each, the break written escaped',
-    async ([, code, visible]) => {
+    async ([, code]) => {
       const printed = printedBy('error');
       const character = String.fromCharCode(code);
       const { inMemory, sender } = await running(() => ({
@@ -204,13 +206,60 @@ describe('settled()', () => {
 
       const rejection = await rejectionOf(inMemory.settled());
 
-      const lineOf = (id: string) =>
-        `ChargeCard@1 orders-service.command.ChargeCard.v1 command.ChargeCard.v1:${id} ${id} attempt 1: card 503`;
-      const expected = [lineOf(`a${visible}1`), lineOf(`b${visible}2`)];
+      const lineOf = (factId: string) =>
+        `ChargeCard@1 orders-service.command.ChargeCard.v1 ${quotedItemOf(`command.ChargeCard.v1:${factId}`)} ${quotedItemOf(factId)} attempt 1: card 503`;
+      const expected = [lineOf(`a${character}1`), lineOf(`b${character}2`)];
       expect(rejection?.message.split(lineBreakPattern)).toEqual(expected);
       expect(printed).toEqual(expected);
     },
   );
+
+  test('a Fault line reads back as the Message’s four words, whatever its Fact id holds', async () => {
+    const next = seededNext(703);
+    const pieces = [
+      'a',
+      '0',
+      '-',
+      ', ',
+      ' and ',
+      ' or ',
+      'and',
+      'or',
+      '.',
+      ' ',
+      '"',
+      '\\',
+      'é',
+      '{}',
+    ];
+    const factIds = Array.from({ length: 300 }, (_, index) => {
+      const inside = Array.from(
+        { length: Math.floor(next() * 6) },
+        () => pieces[Math.floor(next() * pieces.length)],
+      );
+      return `${index}${inside.join('')}z`;
+    });
+    const { inMemory, sender } = await running(() => ({
+      charge: () => fault({ committed: 'no', retryable: true, message: 'card 503' }),
+    }));
+    for (const factId of factIds) {
+      await sender.send('ChargeCard', created, { factId });
+    }
+
+    const rejection = await rejectionOf(inMemory.settled());
+
+    const suffix = ' attempt 1: card 503';
+    const lines = rejection?.message.split(lineBreakPattern) ?? [];
+    expect(lines.map((line) => readWords(line.slice(0, -suffix.length)))).toEqual(
+      factIds.map((factId) => [
+        'ChargeCard@1',
+        'orders-service.command.ChargeCard.v1',
+        `command.ChargeCard.v1:${factId}`,
+        factId,
+      ]),
+    );
+    expect(lines.every((line) => line.endsWith(suffix))).toBe(true);
+  });
 
   test.each<[string, Handlers, (connection: Running) => Promise<unknown>]>([
     [

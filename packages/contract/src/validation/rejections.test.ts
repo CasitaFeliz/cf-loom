@@ -145,7 +145,7 @@ describe('validateRoot: an Endpoint or a Guard lists each Rejection once', () =>
           kind: 'declaration',
           location: 'codes.ORDER_LOCKED',
           rule: 'code-once',
-          message: 'A code is declared once: ORDER_LOCKED (the Contract, twice)',
+          message: 'A code is declared once: ORDER_LOCKED (the Contract twice)',
         },
       ],
     });
