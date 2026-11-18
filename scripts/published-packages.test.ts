@@ -14,6 +14,8 @@ type PackedPackage = {
   readonly manifest: { readonly exports?: unknown; readonly bin?: unknown };
 };
 
+const licenseFiles = ['LICENSE-MIT', 'LICENSE-APACHE'];
+
 const root = join(import.meta.dirname, '..');
 
 /** Runs the `pnpm` on `PATH`, which must be the version `packageManager` names, or pnpm fetches that one. */
@@ -152,6 +154,20 @@ describe('the packages pnpm publishes', () => {
       const packing = packages.filter(({ files }) => files.has('ARCHITECTURE.md'));
 
       expect(packing.map(({ name }) => name)).toEqual([]);
+    });
+
+    it('packs LICENSE-MIT and LICENSE-APACHE, each the same as the repository root one', () => {
+      const problems = packages.flatMap(({ name, path, files }) =>
+        licenseFiles.flatMap((file) => {
+          if (!files.has(file)) {
+            return [`${name}: ${file} missing`];
+          }
+          const same = readFileSync(join(path, file)).equals(readFileSync(join(root, file)));
+          return same ? [] : [`${name}: ${file} differs from the root one`];
+        }),
+      );
+
+      expect(problems).toEqual([]);
     });
   });
 
