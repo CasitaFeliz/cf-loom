@@ -12,8 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # The checks run on the CasitaFeliz org's self-hosted runners (CasitaFeliz/orb-infra, README "CI runners"): an
-  # ephemeral microVM per job, like a GitHub-hosted one. If they are down, point runs-on back to ubuntu-latest.
+  # The checks run on the CasitaFeliz org's self-hosted orb runners. If they are down, point runs-on back to ubuntu-latest.
   # The legs are the test classes of CLAUDE.md's Repository, so a leg's processes fit one runner's memory; the runners share their CPUs.
   check:
     runs-on: orb

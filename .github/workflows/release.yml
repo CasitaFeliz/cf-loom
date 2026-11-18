@@ -1,4 +1,4 @@
-# Publishes every @cf-loom package to npmjs.com, with restricted access, from the changesets on main.
+# Publishes every @cf-loom package to npmjs.com, with public access, from the changesets on main.
 #
 # How a version is released
 # - While .changeset/ holds changesets, the version job keeps the PR "chore: version packages" open
@@ -12,41 +12,35 @@
 #   (scripts/pin-readme-links.ts), so a reader of an installed version reads that version's documents, and
 #   packs it; publish publishes those tarballs with pnpm and pushes a git tag <name>@<version> for each.
 #   The examples (@org/*) are private and ignored by Changesets: never published.
-# - select-mode and publish both run in the npm environment, which only main can use. Publish
-#   authenticates with npm trusted publishing (OIDC), so no npm token can publish; select-mode reads
-#   npmjs.com with NPM_READ_TOKEN, a read-only secret of that environment, which its ~/.npmrc names
-#   as ${NPM_READ_TOKEN} for pnpm to expand. npmjs.com answers 404 for a restricted package the token
-#   cannot read, as if it were unpublished, so select-mode first fails if the token cannot read @cf-loom.
-# - checks, select-mode and version run on the org's self-hosted orb runners (CasitaFeliz/orb-infra, README "CI
-#   runners"); if they are down, point their runs-on back to ubuntu-latest. publish runs on a GitHub-hosted runner,
-#   the only kind npm trusted publishing accepts, and so does pack, which builds what publish publishes.
-# - A publish that failed halfway: "Re-run failed jobs" on its run. The tarballs are kept 30 days and the
-#   versions already published are skipped, so the re-run publishes the rest; otherwise the next push to
-#   main that carries no changeset retries. npm cannot take a version back: fix forward with the next
-#   version.
+# - publish runs in the npm environment, which only main can use, and authenticates with npm trusted
+#   publishing (OIDC), so no npm token can publish. select-mode reads npmjs.com with no token: the
+#   packages are public.
+# - checks, select-mode and version run on the org's self-hosted orb runners; if they are down, point
+#   their runs-on back to ubuntu-latest. publish runs on a GitHub-hosted runner, the only kind npm
+#   trusted publishing accepts, and so does pack, which builds what publish publishes.
+# - A publish that failed halfway: "Re-run failed jobs" on its run. The tarballs are kept 1 day, the
+#   repository's artifact retention, and the versions already published are skipped, so the re-run
+#   publishes the rest; otherwise the next push to main that carries no changeset retries. npm cannot
+#   take a version back: fix forward with the next version.
 #
 # One-time setup by an owner of the @cf-loom npm org and of the repo's settings
-# Steps 1-3, 5 and 6 come before this workflow reaches main; step 7, before the first changeset reaches
-# main; step 4, within 2 days before the first publish.
+# Steps 1 and 3 come before this workflow reaches main; step 4, before the first changeset reaches
+# main; step 2, within 2 days before the first publish.
 # npmjs.com
-# 1. The @cf-loom org has a paid plan, which restricted packages need.
-# 2. A trusted publisher can only be set on an existing package: publish a placeholder 0.0.0 of each,
-#    from an empty folder, logged in with 2FA (a new @cf-loom package needs the same, and step 4,
+# 1. A trusted publisher can only be set on an existing package: publish a placeholder 0.0.0 of each,
+#    from an empty folder, logged in with 2FA (a new @cf-loom package needs the same, and step 2,
 #    before its first publish):
 #      for name in cli client contract handlers messaging server testing; do
-#        printf '{"name":"@cf-loom/%s","version":"0.0.0","license":"UNLICENSED"}\n' "$name" > package.json
-#        npm publish --access restricted
+#        printf '{"name":"@cf-loom/%s","version":"0.0.0","license":"(MIT OR Apache-2.0)"}\n' "$name" > package.json
+#        npm publish --access public
 #      done
-# 3. A granular access token, read-only on the @cf-loom packages, which step 6 saves as NPM_READ_TOKEN.
-# 4. No more than 2 days before the first publish (a trusted publisher unused for 2 days expires: delete
+# 2. No more than 2 days before the first publish (a trusted publisher unused for 2 days expires: delete
 #    it and add it again), for each package (npm >= 11.15, e.g. `npx npm@11 trust ...`):
 #      npm trust github @cf-loom/<name> --repo CasitaFeliz/cf-loom --file release.yml --env npm --allow-publish
 #    then, in the package's settings, Publishing access: "Require two-factor authentication and disallow tokens".
 # GitHub (CasitaFeliz/cf-loom)
-# 5. Settings > Environments: environment npm, Deployment branches and tags: Selected, main only.
-# 6. Settings > Environments > npm > Environment secrets: NPM_READ_TOKEN (step 3), so no branch other
-#    than main can read it.
-# 7. Settings > Actions > General: "Allow GitHub Actions to create and approve pull requests".
+# 3. Settings > Environments: environment npm, Deployment branches and tags: Selected, main only.
+# 4. Settings > Actions > General: "Allow GitHub Actions to create and approve pull requests".
 # Renaming this file or the npm environment stops publishing until a trusted publisher for the new name
 # is added to every package.
 name: Publish packages
@@ -69,9 +63,6 @@ jobs:
 
   select-mode:
     runs-on: orb
-    environment:
-      name: npm
-      deployment: false
     permissions:
       contents: read
     outputs:
@@ -86,26 +77,8 @@ jobs:
         with:
           node-version-file: .node-version
       - run: pnpm install --frozen-lockfile
-      - name: Read npmjs.com with the read token
-        run: |
-          # shellcheck disable=SC2016 # pnpm expands ${NPM_READ_TOKEN} itself, so the file never holds the token
-          echo '//registry.npmjs.org/:_authToken=${NPM_READ_TOKEN}' >> ~/.npmrc
-      - name: Check the read token can read @cf-loom
-        env:
-          NPM_READ_TOKEN: ${{ secrets.NPM_READ_TOKEN }}
-        run: |
-          if [ -z "$NPM_READ_TOKEN" ]; then
-            echo "::error::NPM_READ_TOKEN is empty: save it as a secret of the npm environment (setup step 6)"
-            exit 1
-          fi
-          if ! pnpm info @cf-loom/cli version > /dev/null; then
-            echo "::error::NPM_READ_TOKEN cannot read @cf-loom/cli on npmjs.com: give it read-only access to the @cf-loom packages (setup step 3)"
-            exit 1
-          fi
       - id: select-mode
         uses: changesets/action/select-mode@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
-        env:
-          NPM_READ_TOKEN: ${{ secrets.NPM_READ_TOKEN }}
 
   version:
     needs: select-mode
