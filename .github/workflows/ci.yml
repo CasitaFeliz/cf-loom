@@ -14,16 +14,28 @@ concurrency:
 jobs:
   # The checks run on the CasitaFeliz org's self-hosted orb runners. If they are down, point runs-on back to ubuntu-latest.
   # The legs are the test classes of CLAUDE.md's Repository, so a leg's processes fit one runner's memory; the runners share their CPUs.
+  # A class is the legs of one `memory` value, run once on each Node release the matrix lists: their carets are engines.node
+  # of every package, and scripts/tested-releases.test.ts checks that they agree. The entries of `include` name their `node`
+  # too, since GitHub adds an entry whose `memory` is not in the list without the list's keys.
   check:
     runs-on: orb
     strategy:
       fail-fast: false
       matrix:
         memory: [light, heavy]
+        node: [24.16.0, 26.13.0]
         include:
           - memory: growth
+            node: 24.16.0
             shard: 1/2
           - memory: growth
+            node: 24.16.0
+            shard: 2/2
+          - memory: growth
+            node: 26.13.0
+            shard: 1/2
+          - memory: growth
+            node: 26.13.0
             shard: 2/2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -33,7 +45,7 @@ jobs:
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version-file: .node-version
+          node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Require a changeset for a change to a package, and a bump that follows the title
@@ -103,16 +115,17 @@ jobs:
       - if: matrix.memory == 'growth'
         run: pnpm vitest run --project '*-growth' --shard='${{ matrix.shard }}'
   # The CLI reads and publishes through the npm on PATH (packages/cli/ARCHITECTURE.md): its tests run once for each npm
-  # release this matrix pins, whose carets are engines.npm of @cf-loom/cli; scripts/npm-releases.test.ts checks that
-  # they agree.
+  # release this matrix pins, on each Node release it lists, whose carets are engines.npm of @cf-loom/cli and engines.node
+  # of every package; scripts/tested-releases.test.ts checks that they agree.
   # pnpm puts Node's own folder, with the npm it bundles, first on PATH, so Vitest is started with node.
   # The root vitest.config.ts gives its test processes the light heap, as it does the check job's.
   cli-npm:
-    name: cli-npm (npm ${{ matrix.npm.version }})
+    name: cli-npm (npm ${{ matrix.npm.version }}, node ${{ matrix.node }})
     runs-on: orb
     strategy:
       fail-fast: false
       matrix:
+        node: [24.16.0, 26.13.0]
         npm:
           - version: 11.13.0
             sha256: a4ffa1de3bf1c7f9d5e3dd24fe2921970bdb1589d647f4083eaaaab3be974b7e
@@ -125,7 +138,7 @@ jobs:
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version-file: .node-version
+          node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Install npm ${{ matrix.npm.version }}
