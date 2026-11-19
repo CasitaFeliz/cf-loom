@@ -1,9 +1,13 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { type Ran, runProcess } from '../packages/messaging/test/test-process.ts';
+import {
+  aTemporaryDirectory,
+  type Ran,
+  runProcess,
+} from '../packages/messaging/test/test-process.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 
@@ -25,15 +29,31 @@ function reportOf(biome: Ran): { diagnostics: Diagnostic[] } {
   }
 }
 
-/** Each `C<n>@<line>` the repository's GritQL plugins report for `probe.ts` or the file given, in the order of the lines. */
-async function pluginReportsFor(lines: readonly string[], file = 'probe.ts'): Promise<string[]> {
+/** Copies `biome.json` and each plugin file it lists from the folder `configured` into `project`, so that Biome takes `project` as its project and reads nothing beside it. */
+function copyConfiguration(configured: string, project: string): void {
+  const configuration = JSON.parse(readFileSync(join(configured, 'biome.json'), 'utf8')) as {
+    plugins?: readonly string[];
+  };
+  for (const path of ['biome.json', ...(configuration.plugins ?? [])]) {
+    mkdirSync(dirname(join(project, path)), { recursive: true });
+    cpSync(join(configured, path), join(project, path));
+  }
+}
+
+/** Each `C<n>@<line>` the plugins that the `biome.json` of the folder `configured` lists report for `probe.ts` or the file given, in the order of the lines, linted in a Biome project of its own. */
+async function pluginReportsIn(
+  configured: string,
+  lines: readonly string[],
+  file = 'probe.ts',
+): Promise<string[]> {
   const directory = mkdtempSync(join(tmpdir(), 'cf-loom-lint-'));
   try {
+    copyConfiguration(configured, directory);
     mkdirSync(dirname(join(directory, file)), { recursive: true });
     writeFileSync(join(directory, file), `${lines.join('\n')}\n`);
     const biome = await runProcess(
       join(root, 'node_modules/.bin/biome'),
-      ['lint', '--reporter=json', '--vcs-enabled=false', `--config-path=${root}`, file],
+      ['lint', '--reporter=json', '--vcs-enabled=false', file],
       { cwd: directory },
     );
     return reportOf(biome)
@@ -48,7 +68,25 @@ async function pluginReportsFor(lines: readonly string[], file = 'probe.ts'): Pr
   }
 }
 
+/** Each `C<n>@<line>` the repository's GritQL plugins report for `probe.ts` or the file given, in the order of the lines. */
+function pluginReportsFor(lines: readonly string[], file = 'probe.ts'): Promise<string[]> {
+  return pluginReportsIn(root, lines, file);
+}
+
 describe('lint plugins', () => {
+  it('report a probe the same way when the folder biome.json comes from also holds a biome.json that does not parse', async () => {
+    const configured = aTemporaryDirectory('cf-loom-lint-source-');
+    copyConfiguration(root, configured);
+    mkdirSync(join(configured, 'held'));
+    writeFileSync(join(configured, 'held', 'biome.json'), '{');
+    const lines = [
+      'const counts = [1, 2];',
+      'export const total = counts.reduce((sum, count) => sum + count, 0);',
+    ];
+
+    expect(await pluginReportsIn(configured, lines)).toEqual(['C12@2']);
+  });
+
   it('report reduce and reduceRight, optional calls included (C12)', async () => {
     const lines = [
       'const counts = [1, 2];',
