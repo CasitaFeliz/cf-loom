@@ -1,5 +1,30 @@
 # @cf-loom/cli
 
+## 1.0.0-rc.4
+
+### Major Changes
+
+- d675c8a: `check` and `publish` read the output of npm 12, which prints one version of `npm view` in a list and `npm pack` keyed by package name, and `@cf-loom/cli` declares the npm releases it is tested on in `engines.npm`, `^11.13.0 || ^12.2.1`: npm warns when another npm installs it and refuses under `engine-strict`. `publish` of a Definitions Package lists the project's own files whatever `workspaces` or `workspace` its `.npmrc` sets, and a print of npm that `check` or `publish` cannot read, such as another npm may make, fails with `<npm call> printed <its JSON, cut at 60 characters, or nothing>, not <what that call prints>`, instead of a line about the package's versions or dist-tags.
+
+### Patch Changes
+
+- d4b12a0: `check` and `publish` tell a Change inside a recursive schema from that schema, `defs.<id>` with the id the proposed Contract gives it, where they told it from the Endpoint through every recursive schema above it, so a report grows with its Changes and a Change no longer moves when another field reaches the schema first. Two schema Differences at one place, with one Position and one shape, are one Change, the first found. The `--json` document's `format` is 2 in every command: a Change inside a recursive schema has `at` as `["defs", "<id>", …]` and `path` as `defs.<id>…`. A reader that requires `format` 1 must accept 2.
+- 85febfc: `publish` of a Definitions Package leaves `packageExtensions` out of the package.json it publishes, beside `publishConfig.tag`, since only the project itself reads it and npm 12 refuses to publish a package that has it (`EPACKAGEEXTENSIONS`); `publish --dry-run` and `publish` now agree on it. The project's own package.json is not changed.
+- 85febfc: A first `check` or `publish`, of a package the registry does not know yet, takes the registry from the URL npm's 404 names, and asks `npm whoami` there, instead of asking `npm config get` which registry serves the package, which npm refuses under a `workspaces` setting and in a member of an npm workspaces root. Every npm call cf-loom makes runs with `--workspaces=null`, so a first `check` or `publish` works under `workspaces=true` from any `.npmrc` or `npm_config_workspaces`, and in a workspace member. When npm refuses `npm whoami` under a `workspace` setting, as it does unless the project is a member of a workspaces root, the run exits 3 with a line that names the setting, where it printed `npm config get @org:registry failed (ENOWORKSPACES: …)`. A package name npm prints redacted in its 404, because it holds a UUID or a token shape, is matched with the name cf-loom knows. A registry URL npm prints redacted fails with a line that says so: `npm view <package> failed: npm redacts a registry URL that holds credentials: …` for a password, `npm view <package> failed: npm redacted part of the registry URL (…), so cf-loom cannot name the registry to ask npm whoami` for a UUID or a token, and `npm view <package>'s 404 names no registry: …` for a 404 that names none, in place of `npm config get <key> failed: npm will not print a registry URL that holds credentials: …` and `npm did not say which registry serves <package>`.
+- fb46173: The packages are published to npmjs.com with public access and licensed `MIT OR Apache-2.0`: each package holds `LICENSE-MIT` and `LICENSE-APACHE`, and its `license` says `(MIT OR Apache-2.0)`. Versions 1.0.0-rc.0 to 1.0.0-rc.3 stay published as they are, public with the license `UNLICENSED`; 1.0.0-rc.4 is the first licensed version.
+- 173a819: A list of names in a line a library or the CLI writes closes with a word, `a and b` or `a, b or c`, after a colon too, where about twenty lines listed with bare commas: the settings a Broker's limits leave unset, the subjects a Stream lacks, the Messages handed back, the methods a Fake Provider's Mistake says a path takes (`GET or POST`), the other sites of a refused schema, and the values outside an enum (`is not "public", "internal" or "private"`). A Durable consumer's differences are joined by `; `. A type error that shares a sentence with `generate` is now exactly its line or lines: the `:names` of a path, the Guards a Guard requires earlier and the Providers of a Dependency are listed in the order `generate` lists them, and a refusal `generate` writes once for each header name, Endpoint or refused construct is one type error for each. `generate` lists the Providers of a Dependency in the order its Endpoints list them, no longer sorted by code point, and the type error of a Dependency names each Provider its type is refused for, once. The types no longer judge the `params` of an Endpoint whose `path` is a union of literals, as they do not for a `string`: `generate` judges the path the value holds.
+- 51cbdc3: The defs a Snapshot's schemas reach, the def a `ref` stands for and what each def reaches are answered in one place for each set of defs. Reports, published Snapshots, generated files and Contract Packages are unchanged.
+- Updated dependencies [60c2979]
+- Updated dependencies [d4b12a0]
+- Updated dependencies [fb46173]
+- Updated dependencies [173a819]
+- Updated dependencies [51cbdc3]
+- Updated dependencies [7f2943f]
+- Updated dependencies [9112ec2]
+- Updated dependencies [c4a2e85]
+- Updated dependencies [116374b]
+  - @cf-loom/contract@1.0.0-rc.4
+
 ## 1.0.0-rc.3
 
 ### Patch Changes

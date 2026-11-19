@@ -1,5 +1,21 @@
 # @cf-loom/client
 
+## 1.0.0-rc.4
+
+### Patch Changes
+
+- fb46173: The packages are published to npmjs.com with public access and licensed `MIT OR Apache-2.0`: each package holds `LICENSE-MIT` and `LICENSE-APACHE`, and its `license` says `(MIT OR Apache-2.0)`. Versions 1.0.0-rc.0 to 1.0.0-rc.3 stay published as they are, public with the license `UNLICENSED`; 1.0.0-rc.4 is the first licensed version.
+- Updated dependencies [60c2979]
+- Updated dependencies [d4b12a0]
+- Updated dependencies [fb46173]
+- Updated dependencies [173a819]
+- Updated dependencies [51cbdc3]
+- Updated dependencies [7f2943f]
+- Updated dependencies [9112ec2]
+- Updated dependencies [c4a2e85]
+- Updated dependencies [116374b]
+  - @cf-loom/contract@1.0.0-rc.4
+
 ## 1.0.0-rc.3
 
 ### Patch Changes
