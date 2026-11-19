@@ -1,5 +1,4 @@
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -46,26 +45,22 @@ async function pluginReportsIn(
   lines: readonly string[],
   file = 'probe.ts',
 ): Promise<string[]> {
-  const directory = mkdtempSync(join(tmpdir(), 'cf-loom-lint-'));
-  try {
-    copyConfiguration(configured, directory);
-    mkdirSync(dirname(join(directory, file)), { recursive: true });
-    writeFileSync(join(directory, file), `${lines.join('\n')}\n`);
-    const biome = await runProcess(
-      join(root, 'node_modules/.bin/biome'),
-      ['lint', '--reporter=json', '--vcs-enabled=false', file],
-      { cwd: directory },
-    );
-    return reportOf(biome)
-      .diagnostics.filter((diagnostic) => diagnostic.category === 'plugin')
-      .sort((first, second) => first.location.start.line - second.location.start.line)
-      .map((diagnostic) => {
-        const rule = diagnostic.message.slice(0, diagnostic.message.indexOf(':'));
-        return `${rule}@${diagnostic.location.start.line}`;
-      });
-  } finally {
-    rmSync(directory, { recursive: true });
-  }
+  const directory = aTemporaryDirectory('cf-loom-lint-');
+  copyConfiguration(configured, directory);
+  mkdirSync(dirname(join(directory, file)), { recursive: true });
+  writeFileSync(join(directory, file), `${lines.join('\n')}\n`);
+  const biome = await runProcess(
+    join(root, 'node_modules/.bin/biome'),
+    ['lint', '--reporter=json', '--vcs-enabled=false', file],
+    { cwd: directory },
+  );
+  return reportOf(biome)
+    .diagnostics.filter((diagnostic) => diagnostic.category === 'plugin')
+    .sort((first, second) => first.location.start.line - second.location.start.line)
+    .map((diagnostic) => {
+      const rule = diagnostic.message.slice(0, diagnostic.message.indexOf(':'));
+      return `${rule}@${diagnostic.location.start.line}`;
+    });
 }
 
 /** Each `C<n>@<line>` the repository's GritQL plugins report for `probe.ts` or the file given, in the order of the lines. */
@@ -74,7 +69,7 @@ function pluginReportsFor(lines: readonly string[], file = 'probe.ts'): Promise<
 }
 
 describe('lint plugins', () => {
-  it('report a probe the same way when the folder biome.json comes from also holds a biome.json that does not parse', async () => {
+  it('report C12 for a probe when the folder biome.json is copied from also holds a biome.json that does not parse', async () => {
     const configured = aTemporaryDirectory('cf-loom-lint-source-');
     copyConfiguration(root, configured);
     mkdirSync(join(configured, 'held'));
