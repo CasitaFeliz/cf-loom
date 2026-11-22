@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { joinedOf } from '@cf-loom/contract/internal';
+import { joinedOf, wordOf } from '@cf-loom/contract/internal';
 import { handle } from '@cf-loom/handlers';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import { printedBy } from '../../../contract/test/printed.ts';
@@ -272,7 +272,10 @@ describe('close over sqs()', () => {
     );
     const named = message.slice(message.indexOf('consumers ') + 'consumers '.length);
     const durables = [orders.chargeDurable, orders.notifyDurable];
-    expect([joinedOf(durables, 'and'), joinedOf([...durables].reverse(), 'and')]).toContain(named);
+    const written = [durables, [...durables].reverse()].map((order) =>
+      joinedOf(order.map(wordOf), 'and'),
+    );
+    expect(written).toContain(named);
     expect((error as Error).cause).toBe(refusal);
   });
 

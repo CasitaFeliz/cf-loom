@@ -445,6 +445,26 @@ describe('lint plugins', () => {
     expect(await pluginReportsFor(lines, 'scripts/probe.ts')).toEqual([]);
   });
 
+  it('report a template that closes a list of two with and or or between two interpolations, a nested template included, but not a comma, another word, a literal before the word, a template type or a test file (C1)', async () => {
+    const lines = [
+      'declare const first: string;',
+      'declare const second: string;',
+      `export const closed = \`${'$'}{first} and ${'$'}{second}\`;`,
+      `export const either = \`both ${'$'}{first} or ${'$'}{second} here\`;`,
+      `export const nested = \`x ${'$'}{\`${'$'}{first} and ${'$'}{second}\`} y\`;`,
+      `export const commas = \`${'$'}{first}, ${'$'}{second}\`;`,
+      `export const also = \`${'$'}{first} and also ${'$'}{second}\`;`,
+      `export const literal = \`x and ${'$'}{second}\`;`,
+      `export type Spelled = \`${'$'}{'x'} and ${'$'}{'y'}\`;`,
+    ];
+    const reported = ['C1@3', 'C1@4', 'C1@5', 'C1@5'];
+
+    expect(await pluginReportsFor(lines, 'packages/messaging/src/probe.ts')).toEqual(reported);
+    expect(await pluginReportsFor(lines, 'packages/cli/src/config/probe.ts')).toEqual(reported);
+    expect(await pluginReportsFor(lines, 'packages/messaging/src/probe.test.ts')).toEqual([]);
+    expect(await pluginReportsFor(lines, 'scripts/probe.ts')).toEqual([]);
+  });
+
   it('report a console call in a library package’s source not given one spread of logOf, every method and form, but not the CLI, a test file or the line module (C1)', async () => {
     const lines = [
       'declare const cause: unknown;',

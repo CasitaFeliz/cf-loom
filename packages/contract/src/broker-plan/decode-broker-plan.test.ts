@@ -17,6 +17,7 @@ import {
   byCodePoint,
   decodeBrokerPlan,
   snapshotOf,
+  tokenOf,
   validateRoot,
 } from '../internal/index.ts';
 
@@ -346,7 +347,7 @@ describe('reading a broker plan', () => {
     const decoded = decodeBrokerPlan(aPlanWithStream({}, name));
 
     expect(decoded).toEqual(
-      malformed(`streams.${name} is not a Stream name: a Service name after the prefix`),
+      malformed(`streams.${tokenOf(name)} is not a Stream name: a Service name after the prefix`),
     );
   });
 
@@ -370,7 +371,7 @@ describe('reading a broker plan', () => {
 
   test.each(unreadableStreamNames)('a Stream named "%s" is malformed, naming it', (name) => {
     expect(decodeBrokerPlan(aPlanWithStream({}, name))).toEqual(
-      malformed(`streams.${name} ${notStreamName}`),
+      malformed(`streams.${tokenOf(name)} ${notStreamName}`),
     );
   });
 
@@ -411,7 +412,9 @@ describe('reading a broker plan', () => {
 
     const decoded = decodeBrokerPlan(aPlanWithDurableConsumer({}, name));
 
-    expect(decoded).toEqual(malformed(`durableConsumers.${name} ${notDurableConsumerName}`));
+    expect(decoded).toEqual(
+      malformed(`durableConsumers.${tokenOf(name)} ${notDurableConsumerName}`),
+    );
   });
 
   const unreadableSubjects = [

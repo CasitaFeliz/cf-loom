@@ -946,6 +946,25 @@ describe('decodeSnapshot', () => {
         );
       });
 
+      test('a param named with a comma is one quoted item of the list of params', () => {
+        const identity = 'GET /orders/{}/items/{}';
+        const input = {
+          ...anEndpoint.input,
+          params: { type: 'object', fields: { id: idField } },
+        };
+
+        const result = serviceWith({
+          endpoints: { [identity]: { ...anEndpoint, params: ['a, b', 'c'], input } },
+        });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['endpoints', identity, 'input', 'params'],
+            'declares other fields than the params: "a, b" and c',
+          ),
+        );
+      });
+
       test('a params object on a path without params is malformed at it', () => {
         const result = serviceWith({
           endpoints: {

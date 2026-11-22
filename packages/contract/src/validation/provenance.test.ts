@@ -19,6 +19,7 @@ import {
 } from '../index.ts';
 import {
   type ImportedDefinitions,
+  noVersionLineOf,
   type Root,
   type Snapshot,
   snapshotOf,
@@ -290,6 +291,34 @@ describe('validateRoot and snapshotOf: where a reached declaration came from', (
           rule: 'definitions-ambiguous',
           message:
             'A declaration belongs to one Definitions Package: exported by both @p1/defs and @p2/defs, and neither imports it from the other',
+        },
+      ],
+    });
+  });
+
+  test('the line saying a package has no version writes its name as one item', () => {
+    const line = noVersionLineOf('a, b');
+
+    expect(line).toBe('"a, b" has no version in its package.json');
+  });
+
+  test('two packages whose names hold a comma are each one item of the list naming both', () => {
+    const p1Reaches: ImportedDefinitions[] = [];
+    const p1 = aPackage('a, b', { apiKey }, p1Reaches);
+    const p2 = aPackage('c and d', { apiKey }, [p1]);
+    p1Reaches.push(p2);
+
+    const validated = summarized(validatedOf(aService({ guards: [apiKey] }), [p1, p2]));
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          location: 'guards.apiKey',
+          rule: 'definitions-ambiguous',
+          message:
+            'A declaration belongs to one Definitions Package: exported by both "a, b" and "c and d", and neither imports it from the other',
         },
       ],
     });

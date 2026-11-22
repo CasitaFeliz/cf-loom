@@ -1,3 +1,4 @@
+import { type Token, tokenOf } from '../lines/index.ts';
 import {
   authorPathOf,
   chainDown,
@@ -7,7 +8,6 @@ import {
   type Step,
   type StepChain,
   stepsBelow,
-  tokenOf,
 } from './steps.ts';
 
 /** An Endpoint by identity, with its name. */
@@ -49,7 +49,11 @@ export type Site =
 export type ChangedSite = EndpointSite | MessageSite | CodeSite | NamedSite;
 
 /** A site as every line names it: `endpoints.GET /orders/{} (getOrder)`, `events.OrderCreated@2`, `(root)`. */
-export function siteTextOf(site: Site): string {
+export function siteTextOf(site: Site): Token {
+  return siteWordsOf(site) as Token;
+}
+
+function siteWordsOf(site: Site): string {
   switch (site.kind) {
     case 'root':
       return '(root)';

@@ -9,7 +9,7 @@ import {
 } from '@cf-loom/contract';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { lineBreakPattern, lineBreaks } from '../../contract/test/line-breaks.ts';
+import { lineBreakPattern, lineBreaks, quotedItemOf } from '../../contract/test/line-breaks.ts';
 import {
   type Broker,
   InvalidMessageError,
@@ -503,7 +503,7 @@ describe('publisher.publish', () => {
       const name = `Cf-Loom-a${visible}b`;
       expect((error as Error).message.split(lineBreakPattern)).toEqual([
         expect.stringContaining(`headers.${name}: The transport header ${name} takes a name`),
-        `Tallied@1: body.counts.a${visible}b invalid_type: Invalid input: expected number, received string`,
+        `Tallied@1: body.counts.${quotedItemOf(key)} invalid_type: Invalid input: expected number, received string`,
       ]);
     },
   );
@@ -696,16 +696,29 @@ describe('publisher.publish', () => {
     });
   });
 
+  test('a Message not sent whole, whose Fact id holds a space, names the Fact id as one quoted word', async () => {
+    const { publisher } = await opened(2);
+
+    const thrown = await rejectionOf(
+      publisher.publish('OrderCreated', { v2, v3 }, { factId: 'f 1' }),
+    );
+
+    expect(thrown).toMatchObject({
+      message: 'OrderCreated with Fact id "f 1" was not sent whole; sent: OrderCreated@3',
+      factId: 'f 1',
+    });
+  });
+
   test.for(lineBreaks.filter(([name]) => name !== 'LF' && name !== 'CR'))(
-    'a Message not sent whole, whose Fact id holds %s, is told on one line, the break written escaped',
-    async ([, code, visible]) => {
+    'a Message not sent whole, whose Fact id holds %s, is told on one line, quoted, the break written escaped',
+    async ([, code]) => {
       const { publisher } = await opened(2);
       const factId = `o-1${String.fromCharCode(code)}created`;
 
       const thrown = await rejectionOf(publisher.publish('OrderCreated', { v2, v3 }, { factId }));
 
       expect(thrown).toMatchObject({
-        message: `OrderCreated with Fact id o-1${visible}created was not sent whole; sent: OrderCreated@3`,
+        message: `OrderCreated with Fact id ${quotedItemOf(factId)} was not sent whole; sent: OrderCreated@3`,
         factId,
       });
     },

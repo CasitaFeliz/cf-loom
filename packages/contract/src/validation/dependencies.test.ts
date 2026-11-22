@@ -471,6 +471,21 @@ describe('validateRoot: the installed Contract Package of a Provider', () => {
     });
   });
 
+  test('a Provider whose Elements two packages with commas in their names export is one line naming each as one item', () => {
+    const first = anInstalledContract('payments-service', payments, { packageName: 'a, b' });
+    const second = anInstalledContract('payments-service', payments, { packageName: 'c' });
+
+    const validated = validatedAmong([first, second]);
+
+    expect(validated).toEqual(
+      failed(
+        '(root) dependencies[0]',
+        'dependency-package',
+        'A Provider\'s Elements come from one Contract Package: payments-service\'s Elements are exported by both "a, b" and c, and neither imports them from the other',
+      ),
+    );
+  });
+
   test('a Provider exported by a package whose package.json has no version fails, naming it', () => {
     const unversioned = anUnidentifiedContract(
       { kind: 'unversioned', packageName: '@org/contract-payments-service' },

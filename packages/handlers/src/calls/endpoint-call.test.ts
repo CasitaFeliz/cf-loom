@@ -13,7 +13,7 @@ import { textOf, unbrokenLineOf } from '@cf-loom/contract/internal';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { aHookThatThrows, foreignValues } from '../../../contract/test/foreign-values.ts';
-import { lineBreakPattern, lineBreaks } from '../../../contract/test/line-breaks.ts';
+import { lineBreakPattern, lineBreaks, quotedItemOf } from '../../../contract/test/line-breaks.ts';
 import {
   type CheckedOutcome,
   type EndpointCall,
@@ -1190,7 +1190,8 @@ describe('more of what a direct call answers', () => {
 
   test.for(lineBreaks)(
     'a body with a record key holding %s throws one line per Issue, the break written escaped',
-    async ([, code, visible]) => {
+    async ([, code]) => {
+      const key = `a${String.fromCharCode(code)}b`;
       const tally = defineEndpoint({
         name: 'tally',
         method: 'POST',
@@ -1201,7 +1202,7 @@ describe('more of what a direct call answers', () => {
         success: { status: 204 },
       });
       const tallied = handle(tally, () => success(tally));
-      const body = { [`a${String.fromCharCode(code)}b`]: 'toolong', other: 'toolong' };
+      const body = { [key]: 'toolong', other: 'toolong' };
 
       const caught = await tallied({ body }, {}).then(
         () => undefined,
@@ -1210,11 +1211,36 @@ describe('more of what a direct call answers', () => {
 
       const message = (caught as InvalidCallError).message;
       expect(message.split(lineBreakPattern)).toEqual([
-        expect.stringContaining(`tally: input.body.a${visible}b too_big: `),
+        expect.stringContaining(`tally: input.body.${quotedItemOf(key)} too_big: `),
         expect.stringContaining('tally: input.body.other too_big: '),
       ]);
     },
   );
+
+  test('a body with record keys holding a dot and a space throws one line per Issue, each key one item', async () => {
+    const tally = defineEndpoint({
+      name: 'tally',
+      method: 'POST',
+      path: '/tally',
+      visibility: 'internal',
+      description: 'Counts words',
+      input: { body: z.object({ items: z.array(z.record(z.string(), z.string().max(3))) }) },
+      success: { status: 204 },
+    });
+    const tallied = handle(tally, () => success(tally));
+    const body = { items: [{ 'a.b': 'toolong', 'c d': 'toolong' }] };
+
+    const caught = await tallied({ body }, {}).then(
+      () => undefined,
+      (thrown: unknown) => thrown,
+    );
+
+    const message = (caught as InvalidCallError).message;
+    expect(message.split(lineBreakPattern)).toEqual([
+      expect.stringContaining('tally: input.body.items.0."a.b" too_big: '),
+      expect.stringContaining('tally: input.body.items.0."c d" too_big: '),
+    ]);
+  });
 
   test('something that is no Rejection, rejected, throws InvalidOutcomeError', async () => {
     const getOrderHandler = handle(getOrder, () => reject(undefined as never));

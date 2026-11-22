@@ -5,6 +5,7 @@ import {
   matchOf,
   type TextSource,
   unbrokenLineOf,
+  wordOf,
 } from '@cf-loom/contract/internal';
 import { mistakeOf } from '../mistakes/index.ts';
 import type { FakedProvider, ListedEndpoint, ShadowingEndpoint } from './provided.ts';
@@ -43,7 +44,7 @@ export function matchedOf(faked: FakedProvider, request: Request): Matched {
     case 'none':
       throw mistakeOf({ provider: faked.provider, what: unmatched });
     case 'other-method': {
-      const what = `${unmatched}; that path takes ${joinedOf(match.allowed, 'or')}`;
+      const what = `${unmatched}; that path takes ${joinedOf(match.allowed.map(wordOf), 'or')}`;
       throw mistakeOf({ provider: faked.provider, what });
     }
     case 'matched':

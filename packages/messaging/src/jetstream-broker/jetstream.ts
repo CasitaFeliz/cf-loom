@@ -1,4 +1,4 @@
-import { type Closed, joinedOf, unbrokenLineOf } from '@cf-loom/contract/internal';
+import { type Closed, joinedOf, unbrokenLineOf, wordOf } from '@cf-loom/contract/internal';
 import type { JetStreamOptions } from '@nats-io/jetstream';
 import type { NatsConnection } from '@nats-io/nats-core';
 import { type Broker, type BrokerPrefixed, checkedPrefixOf, planRemedy } from '../broker/index.ts';
@@ -61,6 +61,6 @@ function refusalOf(stream: PrefixedStream, check: StreamCheck): string | undefin
     case 'absent':
       return `The stream ${stream.name} does not exist: ${planRemedy}`;
     case 'missing-subjects':
-      return `The stream ${stream.name} does not hold ${joinedOf(check.subjects, 'and')}: ${planRemedy}`;
+      return `The stream ${stream.name} does not hold ${joinedOf(check.subjects.map(wordOf), 'and')}: ${planRemedy}`;
   }
 }

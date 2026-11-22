@@ -1246,7 +1246,7 @@ describe('cf-loom generate: what it refuses', () => {
         'export const \uFF41 = defineDefinitions({});',
         '',
       ].join('\n'),
-      '\uFF41 and \u{1D44E}',
+      '"\uFF41" and "\u{1D44E}"',
     ],
   ] as const)(
     'a Root file that exports %s is a tooling error naming both exports',
@@ -1282,6 +1282,28 @@ describe('cf-loom generate: what it refuses', () => {
       stdout: '',
       stderr:
         'src/contract/index.ts exports more than one Root: application, contract and definitions\n',
+    });
+  });
+
+  test('a Root file that exports its Roots under names holding a comma and a space writes each name as one item', () => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      'src/contract/index.ts': [
+        "import { defineApplication, defineDefinitions, defineService } from '@cf-loom/contract';",
+        "const service = defineService({ name: 'orders-service' });",
+        "const application = defineApplication({ name: 'orders-service' });",
+        'const definitions = defineDefinitions({});',
+        "export { service as 'a, b', application as c, definitions as 'x y' };",
+        '',
+      ].join('\n'),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: 'src/contract/index.ts exports more than one Root: "a, b", c and "x y"\n',
     });
   });
 
@@ -2325,6 +2347,31 @@ describe('cf-loom generate: the Definitions Packages the Contract imports', () =
       stdout: '',
       stderr:
         'standardRejections is exported by both @org/definitions and @org/other, and neither imports it from the other: import it from one package\n',
+    });
+  });
+
+  test('a standardRejections two packages export, one named with a comma, writes each name as one item', () => {
+    const project = aProject({
+      ...aServiceTaking(["import { definitions } from 'a, b';"], 'definitions'),
+      ...anInstalledPackage(
+        'a, b',
+        { exports: './index.js' },
+        { 'index.js': `import 'c';\n${definitionsModuleOf('MISSING')}` },
+      ),
+      ...anInstalledPackage(
+        'c',
+        { exports: './index.js' },
+        { 'index.js': "export { definitions } from 'a, b';\n" },
+      ),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr:
+        'standardRejections is exported by both "a, b" and c, and neither imports it from the other: import it from one package\n',
     });
   });
 

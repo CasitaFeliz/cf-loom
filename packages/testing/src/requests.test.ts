@@ -722,8 +722,7 @@ describe('fakeProvider: requests', () => {
       damage: (cut: Record<string, unknown>) => {
         delete entryOf(cut)['name'];
       },
-      refusal:
-        "payments-service's exported Snapshot is malformed: endpoints.GET /payments/{}.name is missing",
+      refusal: `payments-service's exported Snapshot is malformed: endpoints."GET /payments/{}".name is missing`,
     },
     {
       given: 'with a shadowing key that is no Endpoint’s identity',

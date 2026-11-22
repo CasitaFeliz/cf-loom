@@ -3,11 +3,12 @@
  * written once: a fixed sentence as a const the types read with `typeof`, and a sentence with names
  * as a template type with the function `generate` writes it by, whose return type is that template,
  * so a function whose text drifts from its type does not compile; a sentence that lists names
- * takes them as a list, in the order `generate` lists them, and joins them itself with `joinedOf`,
- * whose type is `Joined`; a sentence `generate` writes once per name is refused once per name.
+ * takes them as a list of Tokens or literals, in the order `generate` lists them, and joins them
+ * itself with `joinedOf`, whose type is `Joined`; a sentence `generate` writes once per name is
+ * refused once per name.
  */
 
-import { type Joined, joinedOf } from '../lines/index.ts';
+import { type Joined, joinedOf, type Listable } from '../lines/index.ts';
 
 /** Why a Guard declares `params` or `body` in its demands. */
 export const guardDemandsSentence = 'A Guard demands only headers and query';
@@ -105,9 +106,9 @@ export type OneProviderSentence<Names extends readonly string[]> =
 
 /** Writes `OneProviderSentence`. */
 export function oneProviderSentence<const Names extends readonly string[]>(
-  names: Names,
+  names: Names & { readonly [Position in keyof Names]: Listable<Names[Position]> },
 ): OneProviderSentence<Names> {
-  return `A Dependency lists one Provider's Endpoints: ${joinedOf(names, 'and')}`;
+  return `A Dependency lists one Provider's Endpoints: ${joinedOf<Names, 'and'>(names, 'and')}`;
 }
 
 /** Params that are not exactly the path's `:names`, in path order. */
@@ -116,9 +117,9 @@ export type ExactParamsSentence<Names extends readonly string[]> =
 
 /** Writes `ExactParamsSentence`. */
 export function exactParamsSentence<const Names extends readonly string[]>(
-  names: Names,
+  names: Names & { readonly [Position in keyof Names]: Listable<Names[Position]> },
 ): ExactParamsSentence<Names> {
-  return `params declares exactly the path's :names: ${joinedOf(names, 'and')}`;
+  return `params declares exactly the path's :names: ${joinedOf<Names, 'and'>(names, 'and')}`;
 }
 
 /** A Success of a status other than 204 that declares no body. */
@@ -141,8 +142,11 @@ export type RequiresEarlierSentence<
 export function requiresEarlierSentence<
   Name extends string,
   const Missing extends readonly string[],
->(name: Name, missing: Missing): RequiresEarlierSentence<Name, Missing> {
-  return `${name} requires ${joinedOf(missing, 'and')} earlier in guards`;
+>(
+  name: Name,
+  missing: Missing & { readonly [Position in keyof Missing]: Listable<Missing[Position]> },
+): RequiresEarlierSentence<Name, Missing> {
+  return `${name} requires ${joinedOf<Missing, 'and'>(missing, 'and')} earlier in guards`;
 }
 
 /** A header name that is not lower-case. */

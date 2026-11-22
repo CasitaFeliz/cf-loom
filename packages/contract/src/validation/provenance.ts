@@ -1,4 +1,5 @@
 import type * as core from 'zod/v4/core';
+import { joinedOf, type Token, wordOf } from '../lines/index.ts';
 import type { Origin, OriginOf, Place } from '../walker/index.ts';
 import type { Declarations } from '../written/index.ts';
 import { exportNamesOf } from './export-names.ts';
@@ -70,19 +71,19 @@ export function originPackageOf(origin: string | undefined): OriginPackage | und
 }
 
 /** A package as a line names it: its package.json name, or the package.json's path when it has none. */
-export function packageLabelOf(identity: PackageIdentity): string {
+export function packageLabelOf(identity: PackageIdentity): Token {
   switch (identity.kind) {
     case 'identified':
     case 'unversioned':
-      return identity.packageName;
+      return wordOf(identity.packageName);
     case 'unnamed':
-      return identity.manifest;
+      return wordOf(identity.manifest);
   }
 }
 
 /** The line saying a package has no version, the one way any command says it. */
 export function noVersionLineOf(packageName: string): string {
-  return `${packageName} ${lackOf({ kind: 'unversioned', packageName })}`;
+  return `${wordOf(packageName)} ${lackOf({ kind: 'unversioned', packageName })}`;
 }
 
 /** The one line saying what a package.json lacks to name its package. */
@@ -166,7 +167,7 @@ function ambiguousFailureAt(
   at: Place,
   [first, second]: readonly [ImportedDefinitions, ImportedDefinitions],
 ): DeclarationFailure {
-  const both = `exported by both ${packageLabelOf(first)} and ${packageLabelOf(second)}`;
+  const both = `exported by both ${joinedOf([packageLabelOf(first), packageLabelOf(second)], 'and')}`;
   const message = `A declaration belongs to one Definitions Package: ${both}, and neither imports it from the other`;
   return failure(at, 'definitions-ambiguous', message);
 }

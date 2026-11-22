@@ -1,5 +1,5 @@
 import { lifecycles } from '../declarations/index.ts';
-import { joinedOf } from '../lines/index.ts';
+import { joinedOf, wordOf } from '../lines/index.ts';
 import type { Place } from '../walker/index.ts';
 import { writtenTextOf } from '../written/index.ts';
 import { type DeclarationFailure, failure, type Rule } from './failures.ts';
@@ -29,6 +29,9 @@ export function closedValueFailures(
   if (typeof value !== 'string' || allowed.includes(value)) {
     return [];
   }
-  const values = joinedOf(allowed.map(String), 'or');
+  const values = joinedOf(
+    allowed.map((value) => wordOf(String(value))),
+    'or',
+  );
   return [failure(at, rule, `${noun} is ${values}: ${writtenTextOf(value)}`)];
 }

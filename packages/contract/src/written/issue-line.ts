@@ -1,10 +1,11 @@
-import { unbrokenLineOf } from '../lines/index.ts';
+import { dottedPathOf, unbrokenLineOf } from '../lines/index.ts';
 import { listedIssuesOf } from './listed-issues.ts';
 import type { Issue } from './parts.ts';
 
 /** One Issue as a line of an error or a log, after what it came from: where it sits and what broke, never the received value. */
 export function issueLineOf(source: string, { part, path, code, message }: Issue): string {
-  return `${source}: ${[part, ...path].join('.')} ${code}: ${message}`;
+  const location = path.length === 0 ? part : `${part}.${dottedPathOf(path)}`;
+  return `${source}: ${location} ${code}: ${message}`;
 }
 
 /**

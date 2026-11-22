@@ -1,5 +1,5 @@
 import { inspect, types } from 'node:util';
-import { joinedOf, kindWordsOf } from '@cf-loom/contract/internal';
+import { joinedOf, kindWordsOf, wordOf } from '@cf-loom/contract/internal';
 import { z } from 'zod';
 
 /** What a refusal shows of a list: its first entries and its nesting, which the copy and `inspect` both read. */
@@ -67,7 +67,7 @@ export function readAs<Value>(
 
 /** One of `choices`, refused as `one of a, b or c`. */
 export function choice<const Choice extends string>(choices: readonly Choice[]): z.ZodType<Choice> {
-  const expected = `one of ${joinedOf(choices, 'or')}`;
+  const expected = `one of ${joinedOf(choices.map(wordOf), 'or')}`;
   return readAs(expected, (input) => choices.find((candidate) => candidate === input));
 }
 

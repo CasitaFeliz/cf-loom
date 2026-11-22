@@ -1,3 +1,5 @@
+import type { Listable } from './tokens.ts';
+
 /** Every name, each after a comma but the first. */
 type CommaJoined<
   Names extends readonly string[],
@@ -26,9 +28,12 @@ export type Joined<
         ? `${CommaJoined<Before>} ${Closing} ${Last}`
         : string;
 
-/** Several names in one sentence, closed by a word: `200, 201 or 204`, `"a", "b" and "c"`. */
+/**
+ * Several names in one sentence, closed by a word: `200, 201 or 204`, `"a", "b" and "c"`; each
+ * name is a Token or a literal of cf-loom's own, so no name splits the list.
+ */
 export function joinedOf<const Names extends readonly string[], Closing extends 'and' | 'or'>(
-  names: Names,
+  names: Names & { readonly [Position in keyof Names]: Listable<Names[Position]> },
   closing: Closing,
 ): Joined<Names, Closing> {
   const last = names.at(-1);

@@ -1,11 +1,13 @@
 import {
   byCodePoint,
   type EndpointSnapshot,
+  joinedOf,
   methodAndPathOf,
   type PathSegment,
   pathSegmentsOf,
   readEndpointIdentity,
   type ServiceSnapshot,
+  wordOf,
 } from '@cf-loom/contract/internal';
 
 /** An Endpoint with its identity, its method, its OpenAPI path template and the shape of that path. */
@@ -69,6 +71,10 @@ export function pathConflictLineOf(listed: readonly ListedEndpoint[]): string | 
 }
 
 function conflictLineOf(first: ListedEndpoint, next: ListedEndpoint, position: number): string {
-  const names = `${first.endpoint.params[position]} and ${next.endpoint.params[position]}`;
-  return `${first.identity} and ${next.identity} name path param ${position + 1} ${names}: an OpenAPI path names it once, so rename one`;
+  const identities = joinedOf([wordOf(first.identity), wordOf(next.identity)], 'and');
+  const names = joinedOf(
+    [wordOf(first.endpoint.params[position] ?? ''), wordOf(next.endpoint.params[position] ?? '')],
+    'and',
+  );
+  return `${identities} name path param ${position + 1} ${names}: an OpenAPI path names it once, so rename one`;
 }

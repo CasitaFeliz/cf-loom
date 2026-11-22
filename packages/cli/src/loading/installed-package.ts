@@ -1,7 +1,7 @@
 import { findPackageJSON } from 'node:module';
 import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { noVersionLineOf } from '@cf-loom/contract/internal';
+import { noVersionLineOf, wordOf } from '@cf-loom/contract/internal';
 import { packageManifestAt } from './package-manifest.ts';
 
 /** Where a package is installed as the Root file imports it, with its package.json, or why it is not. */
@@ -41,7 +41,7 @@ function missingMessageOf(
   missing: Exclude<Found, { readonly kind: 'found' }>,
 ): string {
   return missing.kind === 'not-installed'
-    ? `${packageName} is not installed`
+    ? `${wordOf(packageName)} is not installed`
     : noVersionLineOf(packageName);
 }
 

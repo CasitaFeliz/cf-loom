@@ -1,4 +1,4 @@
-import { joinedOf } from '../lines/index.ts';
+import { joinedOf, wordOf } from '../lines/index.ts';
 import {
   type FieldOf,
   inFields,
@@ -175,8 +175,9 @@ function sharedTextFailures(
   if (shared === undefined) {
     return [];
   }
-  const [first, second] = shared.map(writtenTextOf);
-  const message = `${nouns[part]}'s values each have a text of their own: ${name} has ${first} and ${second}`;
+  const [first, second] = shared;
+  const both = joinedOf([writtenTextOf(first), writtenTextOf(second)], 'and');
+  const message = `${nouns[part]}'s values each have a text of their own: ${name} has ${both}`;
   return [failure(at, 'shared-text', message)];
 }
 
@@ -225,7 +226,8 @@ function partConflicts(
       const shape = shapeKey(field.schema);
       const first = declaredByName.get(key);
       if (first !== undefined && first.shape !== shape) {
-        const message = `${nouns[part]} has one schema across an Endpoint and its Guards: ${name} differs between ${first.owner} and ${owner}`;
+        const between = joinedOf([wordOf(first.owner), wordOf(owner)], 'and');
+        const message = `${nouns[part]} has one schema across an Endpoint and its Guards: ${name} differs between ${between}`;
         failures.push(failure(at, 'input-conflict', message));
       }
       declaredByName.set(key, first ?? { owner, shape });

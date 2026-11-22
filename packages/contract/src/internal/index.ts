@@ -110,7 +110,17 @@ export {
   writtenPartOf,
   writtenShapeOf,
 } from '../issues/index.ts';
-export { joinedOf, linesTextOf, logOf, unbrokenLineOf } from '../lines/index.ts';
+export type { Listable, Token } from '../lines/index.ts';
+export {
+  dottedPathOf,
+  joinedOf,
+  linesTextOf,
+  logOf,
+  tokenOf,
+  unbrokenLineOf,
+  wordOf,
+  wordsOf,
+} from '../lines/index.ts';
 export type { Reading, ReadingSource } from '../reading/index.ts';
 export { readingOf } from '../reading/index.ts';
 export type {
@@ -248,7 +258,6 @@ export {
   siteTextOf,
   snapshotPathOf,
   stepListOf,
-  tokenOf,
   walkSchemas,
 } from '../walker/index.ts';
 export type {

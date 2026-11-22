@@ -875,6 +875,19 @@ describe('close and a Handler’s wait', () => {
     expect(await Promise.all([first, second])).toEqual(['handed-back', 'handed-back']);
   });
 
+  test('close({ signal }) names a Message whose Fact id holds commas and a closing word as one quoted word', async () => {
+    const { deliver, close } = await consumingWith(neverAnswering);
+    const first = deliver(created, body, { messageId: 'm-1', factId: 'o-1, o-2 and o-3' });
+    const second = deliver(created, body, { messageId: 'm-2', factId: 'f-2' });
+
+    const error = await close({ signal: AbortSignal.abort() }).catch((e: unknown) => e);
+
+    expect(error).toMatchObject({
+      message: `close stopped waiting and handed back 2 Messages: notifyOnCreated ${created} m-1 "o-1, o-2 and o-3" and notifyOnCreated ${created} m-2 f-2`,
+    });
+    expect(await Promise.all([first, second])).toEqual(['handed-back', 'handed-back']);
+  });
+
   test('close({ signal }) names a delivery as handed back exactly when it settled handed-back, however close to its answer the signal aborts', async () => {
     const rows: string[] = [];
     for (let ticks = 0; ticks < 25; ticks += 1) {

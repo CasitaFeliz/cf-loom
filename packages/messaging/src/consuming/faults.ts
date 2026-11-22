@@ -11,6 +11,7 @@ import {
 } from '@cf-loom/handlers/internal';
 import type { Delivery } from '../broker/index.ts';
 import type { Consumed } from '../subjects/index.ts';
+import { messageWordsOf } from './message-words.ts';
 
 /**
  * What a Message Handler ended or failed with, which `onServiceFault` receives: the Subscription or
@@ -93,9 +94,9 @@ function causeOf(fault: ConsumedFault): unknown {
   }
 }
 
-/** What names a Message in a line: the declaration handling it, its subject, broker message id, Fact id and attempt, the last one marked. */
+/** What names a Message in a line: its words, then the attempt, the last one marked. */
 function sourceOf(about: About): string {
-  const { name, subject, messageId, factId, deliveryCount, lastAttempt } = about;
+  const { deliveryCount, lastAttempt } = about;
   const attempt = lastAttempt ? `attempt ${deliveryCount}, the last` : `attempt ${deliveryCount}`;
-  return `${name} ${subject} ${messageId} ${factId} ${attempt}`;
+  return `${messageWordsOf(about)} ${attempt}`;
 }
