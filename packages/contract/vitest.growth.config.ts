@@ -11,8 +11,8 @@ import { growthTestFiles } from './vitest.config.ts';
 export const growthHeapMegabytes = 2048;
 
 /**
- * How many growth test processes run at once: two at their limit fit a CI runner as the heavy
- * class's do, while three at 2,048 MB each would pass a runner's share of its memory.
+ * How many growth test processes run at once: two at their limit fit an 8 GB machine as the heavy
+ * class's do, while three at 2,048 MB each would pass its share of that memory.
  */
 const growthWorkers = 2;
 
