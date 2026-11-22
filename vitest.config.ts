@@ -14,10 +14,10 @@ declare module 'vitest' {
 }
 
 /**
- * The heap limit in megabytes of every test process, so that the 7 processes Vitest starts on an
- * 8-core runner (`availableParallelism() - 1`) fit its memory: all 7 at their limit were measured at
- * about 6.4 GB with Vitest's own process, before servers and children, and 640 is the measured
- * fallback. It reaches the processes as `NODE_OPTIONS`, which the `env` replaces and does not append
+ * The heap limit in megabytes of every test process, so that the processes Vitest starts
+ * (`availableParallelism() - 1`) fit the memory of an 8-core, 8 GB machine, and so of CI's
+ * GitHub-hosted runner (4 vCPUs, 16 GB, 3 processes): all 7 at their limit were measured at about
+ * 6.4 GB with Vitest's own process, before servers and children, and 640 is the measured fallback. It reaches the processes as `NODE_OPTIONS`, which the `env` replaces and does not append
  * to, so a developer's own `NODE_OPTIONS` never reaches a test process.
  */
 export const lightHeapMegabytes = 768;
