@@ -1,4 +1,0 @@
-# The runner labels the workflows may name beyond GitHub's own: the CasitaFeliz org's self-hosted runners.
-self-hosted-runner:
-  labels:
-    - orb

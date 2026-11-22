@@ -12,10 +12,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # The checks run on the CasitaFeliz org's self-hosted orb runners. If they are down, point runs-on back to ubuntu-latest.
-  # The legs are the test classes of CLAUDE.md's Repository, so a leg's processes fit one runner's memory; the runners share their CPUs.
+  # The checks run on GitHub-hosted runners, free for a public repository. The CasitaFeliz org's self-hosted orb runners
+  # take no public repository: they would run a fork's pull request on the org's machines.
+  # The legs are the test classes of CLAUDE.md's Repository, so a leg's processes fit one runner's memory.
   check:
-    runs-on: orb
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -109,7 +110,7 @@ jobs:
   # The root vitest.config.ts gives its test processes the light heap, as it does the check job's.
   cli-npm:
     name: cli-npm (npm ${{ matrix.npm.version }})
-    runs-on: orb
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:

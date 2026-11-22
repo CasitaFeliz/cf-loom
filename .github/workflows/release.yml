@@ -15,9 +15,9 @@
 # - publish runs in the npm environment, which only main can use, and authenticates with npm trusted
 #   publishing (OIDC), so no npm token can publish. select-mode reads npmjs.com with no token: the
 #   packages are public.
-# - checks, select-mode and version run on the org's self-hosted orb runners; if they are down, point
-#   their runs-on back to ubuntu-latest. publish runs on a GitHub-hosted runner, the only kind npm
-#   trusted publishing accepts, and so does pack, which builds what publish publishes.
+# - Every job runs on a GitHub-hosted runner, free for a public repository; the org's self-hosted orb
+#   runners take no public repository (ci.yml). publish needs one anyway, the only kind npm trusted
+#   publishing accepts, and so does pack, which builds what publish publishes.
 # - A publish that failed halfway: "Re-run failed jobs" on its run. The tarballs are kept 1 day, the
 #   repository's artifact retention, and the versions already published are skipped, so the re-run
 #   publishes the rest; otherwise the next push to main that carries no changeset retries. npm cannot
@@ -62,7 +62,7 @@ jobs:
     uses: ./.github/workflows/ci.yml
 
   select-mode:
-    runs-on: orb
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     outputs:
@@ -83,7 +83,7 @@ jobs:
   version:
     needs: select-mode
     if: needs.select-mode.outputs.mode == 'version'
-    runs-on: orb
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
